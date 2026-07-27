@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARBY Pharma Distribution Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs" type="module"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+  <div id="toast" class="toast"></div>
+  <div id="confirmModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <h3 id="confirmTitle">Confirm action</h3>
+      <p id="confirmMessage"></p>
+      <div class="modal-actions"><button id="confirmCancel" class="btn btn-outline" type="button">Cancel</button><button id="confirmAction" class="btn btn-danger" type="button">Confirm</button></div>
+    </div>
+  </div>
+
+  <header class="simple-header">
+    <div class="simple-brand">Pharma Reporting Demo</div>
+    <div class="nav-actions hidden" id="publicNav"></div>
+    <div class="nav-actions hidden" id="privateNav">
+      <span id="loggedUserLabel" class="user-label"></span>
+      <button id="logoutBtn" class="btn btn-outline">Logout</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-login" class="view auth-view active-view">
+      <div class="auth-card">
+        <div>
+          <h2>Login</h2>
+          <p class="muted">Login as Super Admin or an approved employee.</p>
+        </div>
+        <form id="loginForm" class="form-grid one-col">
+          <label>Email<input id="loginEmail" type="email" required placeholder="admin@arby.local" value="admin@arby.local"></label>
+          <label>Password<input id="loginPassword" value="admin123" type="password" required placeholder="••••••••"></label>
+          <button class="btn btn-primary" type="submit">Login</button>
+        </form>
+        <div class="demo-box"><strong>Demo Admin:</strong> admin@arby.local &nbsp; / &nbsp; admin123</div>
+        <button class="text-link" type="button" data-view="signup">Create employee account</button>
+      </div>
+    </section>
+
+    <section id="view-signup" class="view auth-view">
+      <div class="auth-card wide">
+        <div>
+          <h2>Employee Signup</h2>
+          <p class="muted">Select your company and submit the account for approval.</p>
+        </div>
+        <form id="signupForm" class="form-grid">
+          <label>Full name<input id="signupName" required></label>
+          <label>Email<input id="signupEmail" type="email" required></label>
+          <label>Password<input id="signupPassword" type="password" minlength="6" required></label>
+          <label>Company<select id="signupCompany" required></select></label>
+          <button class="btn btn-primary span-2" type="submit">Submit for approval</button>
+          <button class="text-link span-2" type="button" data-view="login">Back to login</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="view-admin" class="view dashboard-view">
+      <div class="dashboard-header">
+        <div><h2>Dashboard</h2></div>
+        <div class="stat-grid" id="adminStats"></div>
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-tab="admin-overview">Overview</button>
+        <button class="tab" data-tab="admin-companies">Companies</button>
+        <button class="tab" data-tab="admin-employees">Employees</button>
+        <button class="tab" data-tab="admin-import">PDF Import</button>
+        <button class="tab" data-tab="admin-data">Stock Data</button>
+      </div>
+
+      <div id="admin-overview" class="tab-panel active">
+        <div class="panel-grid">
+          <div class="panel"><h3>System workflow</h3><ol class="workflow"><li>Create or auto-detect companies</li><li>Employee selects company during signup</li><li>Admin approves and activates account</li><li>Employee sees only assigned company data</li></ol></div>
+          <div class="panel"><h3>Security rule</h3><p>Every stock record is linked to a company. Employee queries are filtered by the company ID stored on their profile.</p></div>
+        </div>
+      </div>
+
+      <div id="admin-companies" class="tab-panel">
+        <div class="panel">
+          <h3>Add company</h3>
+          <form id="companyForm" class="inline-form"><input id="companyName" placeholder="Company name" required><button class="btn btn-primary">Add Company</button></form>
+        </div>
+        <div class="panel"><div class="company-list-heading"><h3>Company list</h3><div class="bulk-actions"><label class="select-all"><input id="selectAllCompanies" type="checkbox"> Select all</label><button id="bulkDeactivateCompanies" class="btn btn-outline" type="button">Deactivate selected</button><button id="bulkDeleteCompanies" class="btn btn-danger" type="button">Delete selected</button></div></div><div id="companyList"></div></div>
+      </div>
+
+      <div id="admin-employees" class="tab-panel">
+        <div class="panel"><h3>Employee approvals</h3><div id="employeeList"></div></div>
+      </div>
+
+      <div id="admin-import" class="tab-panel">
+        <div class="panel">
+          <h3>Upload Sales, Stock & Return PDF</h3>
+          <p class="muted">The browser extracts text, detects headings such as “Group: ABC (COMPANY NAME)”, creates missing companies, and imports rows where possible.</p>
+          <div class="upload-box">
+            <input id="pdfFile" type="file" accept="application/pdf">
+            <button id="extractPdfBtn" class="btn btn-primary">Extract & Import</button>
+          </div>
+          <div id="importProgress" class="progress-text"></div>
+          <div id="importSummary"></div>
+        </div>
+      </div>
+
+      <div id="admin-data" class="tab-panel">
+        <div class="panel"><h3>All stock records</h3><div id="adminTableWrap"></div></div>
+      </div>
+    </section>
+
+    <section id="view-employee" class="view dashboard-view">
+      <div class="dashboard-header">
+        <div><h2 id="employeeCompanyTitle">Company Stock Report</h2></div>
+        <div class="stat-grid" id="employeeStats"></div>
+      </div>
+
+      <div class="panel reports-panel">
+        <div class="reports-toolbar">
+          <div>
+            <h3>Available Reports</h3>
+            <p class="muted">Latest report appears first. Click a report card to open its stock data.</p>
+          </div>
+          <div class="date-filters">
+            <label>From date<input id="reportDateFrom" type="date"></label>
+            <label>To date<input id="reportDateTo" type="date"></label>
+            <button id="resetReportDates" class="btn btn-outline" type="button">Reset dates</button>
+          </div>
+        </div>
+        <div id="employeeReportCards" class="report-cards"></div>
+      </div>
+
+      <div class="panel filter-panel">
+        <div class="filters">
+          <label>Search item<input id="filterSearch" placeholder="Product name"></label>
+          <label>Group<select id="filterGroup"><option value="">All groups</option></select></label>
+          <label>Stock status<select id="filterStatus"><option value="">All</option><option value="positive">Positive</option><option value="zero">Zero</option><option value="negative">Negative</option></select></label>
+          <label>Min sale qty<input id="filterMinSale" type="number" min="0"></label>
+          <label>Min closing qty<input id="filterMinClosing" type="number"></label>
+          <label>Sort by<select id="filterSort"><option value="item">Item</option><option value="saleDesc">Net Sale (High-Low)</option><option value="closingDesc">Closing (High-Low)</option><option value="amountDesc">Amount (High-Low)</option></select></label>
+        </div>
+        <div class="filter-actions">
+          <button id="resetFilters" class="btn btn-outline">Reset</button>
+          <button id="exportCsv" class="btn btn-outline">Export CSV</button>
+          <button id="exportPdf" class="btn btn-primary">Download PDF</button>
+        </div>
+      </div>
+      <div class="panel report-panel">
+        <div class="report-heading">
+          <div class="official-report-title"><h3>ARBY ENTERPRISES, HYDERABAD</h3><h4>SALES, STOCK &amp; RETURN REPORT</h4><p id="reportMeta"></p></div>
+          <div class="report-badge" id="reportCompanyBadge"></div>
+        </div>
+        <div id="employeeTableWrap"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Localhost prototype • Data is stored in your browser LocalStorage</footer>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
