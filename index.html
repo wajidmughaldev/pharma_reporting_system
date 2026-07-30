@@ -11,6 +11,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs" type="module"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
   <div id="toast" class="toast"></div>
@@ -74,7 +75,9 @@
         <button class="tab active" data-tab="admin-overview">Overview</button>
         <button class="tab" data-tab="admin-companies">Companies</button>
         <button class="tab" data-tab="admin-employees">Employees</button>
-        <button class="tab" data-tab="admin-import">PDF Import</button>
+        <button class="tab" data-tab="admin-import">Stock &amp; Sales Import</button>
+        <button class="tab" data-tab="admin-area-import">Area Wise Import</button>
+        <button class="tab" data-tab="admin-party-import">Party Wise Import</button>
         <button class="tab" data-tab="admin-data">Stock Data</button>
       </div>
 
@@ -99,14 +102,53 @@
 
       <div id="admin-import" class="tab-panel">
         <div class="panel">
-          <h3>Upload Sales, Stock & Return PDF</h3>
-          <p class="muted">The browser extracts text, detects headings such as “Group: ABC (COMPANY NAME)”, creates missing companies, and imports rows where possible.</p>
+          <h3>Upload Sales, Stock &amp; Return Report</h3>
+          <p class="muted">Upload the report as PDF or CSV. The system detects the company and group for every item, creates missing companies, and imports the stock and sales rows.</p>
           <div class="upload-box">
-            <input id="pdfFile" type="file" accept="application/pdf">
-            <button id="extractPdfBtn" class="btn btn-primary">Extract & Import</button>
+            <input id="pdfFile" type="file" accept=".pdf,.csv,application/pdf,text/csv">
+            <button id="extractPdfBtn" class="btn btn-primary">Extract &amp; Import</button>
           </div>
+          <p class="format-note">Accepted formats: PDF, CSV</p>
           <div id="importProgress" class="progress-text"></div>
           <div id="importSummary"></div>
+        </div>
+      </div>
+
+      <div id="admin-area-import" class="tab-panel">
+        <div class="panel">
+          <h3>Upload Area Wise Report</h3>
+          <p class="muted">Upload “ITEM SALES STATISTICS (AREA WISE)” as PDF or CSV. Products are matched with the existing Sales, Stock &amp; Return data using at least 75% core-name similarity and then TP confirmation, so each employee sees only their assigned company. Extra suffixes such as TAB and 20S are allowed. Excel remains supported for the current demo file.</p>
+          <div class="upload-box">
+            <input id="areaWiseFile" type="file" accept=".pdf,.csv,.xlsx,.xls,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+            <button id="extractAreaWiseBtn" class="btn btn-primary" type="button">Extract &amp; Import</button>
+          </div>
+          <p class="format-note">Accepted formats: PDF, CSV (Excel also supported)</p>
+          <div id="areaWiseProgress" class="progress-text"></div>
+          <div id="areaWiseSummary"></div>
+        </div>
+        <div class="panel">
+          <h3>Imported Area Wise Reports</h3>
+          <p class="muted">Expand an imported report to review its unmatched and ambiguous items, including TP, total quantity, total amount, and the reason it could not be assigned to a company.</p>
+          <div id="areaWiseAdminImports"></div>
+        </div>
+      </div>
+
+
+      <div id="admin-party-import" class="tab-panel">
+        <div class="panel">
+          <h3>Upload Party Wise Report</h3>
+          <p class="muted">Upload the party-wise sale report as PDF or CSV. Every item is matched against the existing Sales, Stock &amp; Return data using at least 75% core-name similarity and then TP confirmation. Extra suffixes such as TAB and 20S are allowed. Employees only receive rows belonging to their assigned company.</p>
+          <div class="upload-box">
+            <input id="partyWiseFile" type="file" accept=".pdf,.csv,application/pdf,text/csv">
+            <button id="extractPartyWiseBtn" class="btn btn-primary" type="button">Extract &amp; Import</button>
+          </div>
+          <p class="format-note">Accepted formats: PDF, CSV</p>
+          <div id="partyWiseProgress" class="progress-text"></div>
+          <div id="partyWiseSummary"></div>
+        </div>
+        <div class="panel">
+          <h3>Imported Party Wise Reports</h3>
+          <div id="partyWiseAdminImports"></div>
         </div>
       </div>
 
@@ -117,47 +159,138 @@
 
     <section id="view-employee" class="view dashboard-view">
       <div class="dashboard-header">
-        <div><h2 id="employeeCompanyTitle">Company Stock Report</h2></div>
+        <div><h2 id="employeeCompanyTitle">Company Reports</h2></div>
         <div class="stat-grid" id="employeeStats"></div>
       </div>
 
-      <div class="panel reports-panel">
-        <div class="reports-toolbar">
-          <div>
-            <h3>Available Reports</h3>
-            <p class="muted">Latest report appears first. Click a report card to open its stock data.</p>
-          </div>
-          <div class="date-filters">
-            <label>From date<input id="reportDateFrom" type="date"></label>
-            <label>To date<input id="reportDateTo" type="date"></label>
-            <button id="resetReportDates" class="btn btn-outline" type="button">Reset dates</button>
-          </div>
-        </div>
-        <div id="employeeReportCards" class="report-cards"></div>
+      <div class="employee-report-tabs" role="tablist" aria-label="Employee reporting type">
+        <button class="report-mode-btn active" data-employee-report="stock" type="button">Stock Reporting</button>
+        <button class="report-mode-btn" data-employee-report="area" type="button">Area Wise Reporting</button>
+        <button class="report-mode-btn" data-employee-report="party" type="button">Party Wise Reporting</button>
       </div>
 
-      <div class="panel filter-panel">
-        <div class="filters">
-          <label>Search item<input id="filterSearch" placeholder="Product name"></label>
-          <label>Group<select id="filterGroup"><option value="">All groups</option></select></label>
-          <label>Stock status<select id="filterStatus"><option value="">All</option><option value="positive">Positive</option><option value="zero">Zero</option><option value="negative">Negative</option></select></label>
-          <label>Min sale qty<input id="filterMinSale" type="number" min="0"></label>
-          <label>Min closing qty<input id="filterMinClosing" type="number"></label>
-          <label>Sort by<select id="filterSort"><option value="item">Item</option><option value="saleDesc">Net Sale (High-Low)</option><option value="closingDesc">Closing (High-Low)</option><option value="amountDesc">Amount (High-Low)</option></select></label>
+      <div id="employeeStockReporting" class="employee-report-mode active">
+        <div class="panel reports-panel">
+          <div class="reports-toolbar">
+            <div>
+              <h3>Available Reports</h3>
+              <p class="muted">Latest report appears first. Click a report card to open its stock data.</p>
+            </div>
+            <div class="date-filters">
+              <label>From date<input id="reportDateFrom" type="date"></label>
+              <label>To date<input id="reportDateTo" type="date"></label>
+              <button id="resetReportDates" class="btn btn-outline" type="button">Reset dates</button>
+            </div>
+          </div>
+          <div id="employeeReportCards" class="report-cards"></div>
         </div>
-        <div class="filter-actions">
-          <button id="resetFilters" class="btn btn-outline">Reset</button>
-          <button id="exportCsv" class="btn btn-outline">Export CSV</button>
-          <button id="exportPdf" class="btn btn-primary">Download PDF</button>
+
+        <div class="panel filter-panel">
+          <div class="filters">
+            <label>Search item<input id="filterSearch" placeholder="Product name"></label>
+            <label>Group<select id="filterGroup"><option value="">All groups</option></select></label>
+            <label>Stock status<select id="filterStatus"><option value="">All</option><option value="positive">Positive</option><option value="zero">Zero</option><option value="negative">Negative</option></select></label>
+            <label>Min sale qty<input id="filterMinSale" type="number" min="0"></label>
+            <label>Min closing qty<input id="filterMinClosing" type="number"></label>
+            <label>Sort by<select id="filterSort"><option value="item">Item</option><option value="saleDesc">Net Sale (High-Low)</option><option value="closingDesc">Closing (High-Low)</option><option value="amountDesc">Amount (High-Low)</option></select></label>
+          </div>
+          <div class="filter-actions">
+            <button id="resetFilters" class="btn btn-outline">Reset</button>
+            <button id="previewStockTxt" class="btn btn-outline" type="button">Preview TXT</button>
+            <button id="downloadStockTxt" class="btn btn-outline" type="button">Download TXT</button>
+            <button id="previewStockPdf" class="btn btn-outline" type="button">Preview PDF</button>
+            <button id="downloadStockPdf" class="btn btn-primary" type="button">Download PDF</button>
+          </div>
+        </div>
+        <div class="panel report-panel">
+          <div class="report-heading">
+            <div class="official-report-title"><h3 id="stockReportDistributor">ARBY ENTERPRISES, HYDERABAD</h3><h4>SALES, STOCK &amp; RETURN REPORT</h4><p id="reportMeta"></p></div>
+            <div class="report-badge" id="reportCompanyBadge"></div>
+          </div>
+          <div id="employeeTableWrap"></div>
         </div>
       </div>
-      <div class="panel report-panel">
-        <div class="report-heading">
-          <div class="official-report-title"><h3>ARBY ENTERPRISES, HYDERABAD</h3><h4>SALES, STOCK &amp; RETURN REPORT</h4><p id="reportMeta"></p></div>
-          <div class="report-badge" id="reportCompanyBadge"></div>
+
+      <div id="employeeAreaReporting" class="employee-report-mode">
+        <div class="panel reports-panel">
+          <div class="reports-toolbar">
+            <div>
+              <h3>Available Area Wise Reports</h3>
+              <p class="muted">Only area-wise rows matched to your company are available here.</p>
+            </div>
+            <div class="date-filters">
+              <label>From date<input id="areaReportDateFrom" type="date"></label>
+              <label>To date<input id="areaReportDateTo" type="date"></label>
+              <button id="resetAreaReportDates" class="btn btn-outline" type="button">Reset dates</button>
+            </div>
+          </div>
+          <div id="employeeAreaReportCards" class="report-cards"></div>
         </div>
-        <div id="employeeTableWrap"></div>
+
+        <div class="panel filter-panel">
+          <div class="filters area-filters">
+            <label>Search item<input id="areaFilterSearch" placeholder="Product name"></label>
+            <label>Area<select id="areaFilterCode"><option value="">All areas</option></select></label>
+            <label>Min total qty<input id="areaFilterMinQty" type="number"></label>
+            <label>Sort by<select id="areaFilterSort"><option value="item">Item</option><option value="qtyDesc">Total Qty (High-Low)</option><option value="amountDesc">Total Amount (High-Low)</option><option value="tpDesc">TP (High-Low)</option></select></label>
+          </div>
+          <div class="filter-actions">
+            <button id="resetAreaFilters" class="btn btn-outline" type="button">Reset</button>
+            <button id="previewAreaTxt" class="btn btn-outline" type="button">Preview TXT</button>
+            <button id="downloadAreaTxt" class="btn btn-outline" type="button">Download TXT</button>
+            <button id="previewAreaPdf" class="btn btn-outline" type="button">Preview PDF</button>
+            <button id="downloadAreaPdf" class="btn btn-primary" type="button">Download PDF</button>
+          </div>
+        </div>
+        <div class="panel report-panel area-report-panel">
+          <div class="report-heading">
+            <div class="official-report-title"><h3 id="areaReportDistributor">TAWAKAL ENTERPRISES CHANNEL-II</h3><h4>ITEM SALES STATISTICS (AREA WISE)</h4><p id="areaReportMeta"></p></div>
+            <div class="report-badge" id="areaReportCompanyBadge"></div>
+          </div>
+          <div id="employeeAreaTableWrap"></div>
+        </div>
       </div>
+
+      <div id="employeePartyReporting" class="employee-report-mode">
+        <div class="panel reports-panel">
+          <div class="reports-toolbar">
+            <div>
+              <h3>Available Party Wise Reports</h3>
+              <p class="muted">Only party rows containing products matched to your company are shown.</p>
+            </div>
+            <div class="date-filters">
+              <label>From date<input id="partyReportDateFrom" type="date"></label>
+              <label>To date<input id="partyReportDateTo" type="date"></label>
+              <button id="resetPartyReportDates" class="btn btn-outline" type="button">Reset dates</button>
+            </div>
+          </div>
+          <div id="employeePartyReportCards" class="report-cards"></div>
+        </div>
+
+        <div class="panel filter-panel">
+          <div class="filters party-filters">
+            <label>Search item or party<input id="partyFilterSearch" placeholder="Product or party name"></label>
+            <label>Area<select id="partyFilterArea"><option value="">All areas</option></select></label>
+            <label>Party<select id="partyFilterParty"><option value="">All parties</option></select></label>
+            <label>Min quantity<input id="partyFilterMinQty" type="number"></label>
+          </div>
+          <div class="filter-actions">
+            <button id="resetPartyFilters" class="btn btn-outline" type="button">Reset</button>
+            <button id="previewPartyTxt" class="btn btn-outline" type="button">Preview TXT</button>
+            <button id="downloadPartyTxt" class="btn btn-outline" type="button">Download TXT</button>
+            <button id="previewPartyPdf" class="btn btn-outline" type="button">Preview PDF</button>
+            <button id="downloadPartyPdf" class="btn btn-primary" type="button">Download PDF</button>
+          </div>
+        </div>
+        <div class="panel report-panel party-report-panel">
+          <div class="report-heading">
+            <div class="official-report-title"><h3 id="partyReportDistributor">TAWAKAL ENTERPRISES CHANNEL-II</h3><h4>PARTY WISE SALES REPORT</h4><p id="partyReportMeta"></p></div>
+            <div class="report-badge" id="partyReportCompanyBadge"></div>
+          </div>
+          <div id="employeePartyTableWrap"></div>
+        </div>
+      </div>
+
     </section>
   </main>
 
