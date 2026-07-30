@@ -1,28 +1,25 @@
-PRODUCT MATCHING FIX V11
+PERFORMANCE FIX V12
 
 Replace this file in your existing project root:
 
   app.js
 
-IMPORTANT TEST STEPS
+STEPS
 1. Replace app.js.
 2. Refresh the browser using Ctrl + F5.
 3. Login as Admin.
 4. Import Sales, Stock & Return first.
-5. Re-import Area Wise and Party Wise reports so the new matcher processes the rows again.
+5. Import Area Wise or Party Wise.
+6. Keep the tab open while the progress message advances.
 
-WHAT CHANGED
-- A unique product-name match no longer requires TP to match.
-- Trailing report labels such as TOTAL and TTL are removed from product names.
-- Strong name matches of 90% or more are assigned by name when only one company is possible.
-- TP is used only to resolve a strong-name match when multiple companies remain possible.
-- Lower-confidence fuzzy matches and genuine extra form/pack differences can still require TP.
-- This applies to both Area Wise and Party Wise imports.
+WHAT WAS FIXED
+- Large Area Wise and 350-page Party Wise reports no longer run one massive synchronous matching loop.
+- Matching now runs in small browser-friendly batches.
+- Product matching is indexed and cached, so repeated medicines are resolved once.
+- The same report import replaces its previous copy, preventing browser storage from growing on every test.
+- Admin unmatched tables are capped at 200 visible rows to protect the page. Use "Download all as CSV" for the complete saved list.
 
-EXAMPLES NOW MATCHED WITHOUT TP
-- AZOLAC LF 400G  <->  AZOLAC LF 400G TOTAL
-- BETAWAIS CREAM 15GM 1S  <->  BETAWAIS G CREAM 15GM 1S
-- TRIVOLIVE 500MG IM INJ VIAL  <->  TRIVOLIVE 500MG IM INJ VIAL TOTAL
-- WINPRIDE 50MG TAB 1X10S  <->  WINPRIDE 50MG TAB 1X10S TOTAL
-- ZODIP-V 5/80MG TAB 14S  <->  ZODIP-V 5/80MG TAB 14S TOTAL
-- ZORAT 10MG TAB 10S  <->  ZORAT 10MG TAB 10S TOTAL
+DATA NOTES
+- Existing saved reports remain available.
+- Re-importing the same filename and report date replaces only that same imported report.
+- Product-name matching rules from V11 remain active.

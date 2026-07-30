@@ -14,6 +14,19 @@ const seedData={
   reportMeta:{distributor:'ARBY ENTERPRISES, HYDERABAD',from:'01/07/2025',to:'27/07/2026',printedOn:'27/07/2026'}
 };
 let db=await loadDB(); let currentUser=null; let selectedReportId=null; let selectedAreaReportId=null; let selectedPartyReportId=null; let employeeReportMode='stock';
+function removeDuplicateReportCopies(state,importsKey,rowsKey){
+  const original=Array.isArray(state[importsKey])?state[importsKey]:[],rows=Array.isArray(state[rowsKey])?state[rowsKey]:[];
+  const knownIds=new Set(original.map(report=>report.id).filter(Boolean));
+  const seen=new Set(),kept=[];
+  for(const report of [...original].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))){
+    const key=`${String(report.filename||'').trim().toLowerCase()}|${String(report.reportDate||report.date||'').slice(0,10)}`;
+    if(seen.has(key))continue;
+    seen.add(key);kept.push(report);
+  }
+  const keepIds=new Set(kept.map(report=>report.id));
+  state[importsKey]=kept;
+  state[rowsKey]=rows.filter(row=>!knownIds.has(row.importId)||keepIds.has(row.importId));
+}
 async function loadDB(){
   try{
     let raw=localStorage.getItem(DB_KEY);
@@ -28,6 +41,9 @@ async function loadDB(){
     loaded.imports.forEach(i=>{i.id=i.id||uid();i.meta=i.meta||loaded.reportMeta||seedData.reportMeta;i.reportDate=i.reportDate||toIsoDate(i.meta?.printedOn)||String(i.date||'').slice(0,10);});
     if(fallback)loaded.stock.forEach(r=>{if(!r.importId)r.importId=fallback.id;});
     loaded.stock=loaded.stock.map(r=>({...r,item:cleanImportedItem(r.item)})).filter(r=>r.item&&!isPdfNoiseText(r.item));
+    removeDuplicateReportCopies(loaded,'imports','stock');
+    removeDuplicateReportCopies(loaded,'areaWiseImports','areaWiseRows');
+    removeDuplicateReportCopies(loaded,'partyWiseImports','partyWiseRows');
     return loaded;
   }catch{return structuredClone(seedData)}
 }
@@ -67,6 +83,17 @@ async function saveDB(){
   try{const compressed=await compressStoredText(json);if(compressed)payload='gz:'+compressed;}catch(err){console.warn('Compression unavailable; saving plain demo data.',err);}
   if(revision!==saveRevision)return;
   try{localStorage.setItem(DB_KEY,payload);}catch(err){console.error(err);toast('Browser storage is full. Remove an older demo import and try again.');}
+}
+function yieldToBrowser(){return new Promise(resolve=>setTimeout(resolve,0));}
+function replaceExistingImportedReport(importsKey,rowsKey,filename,reportDate){
+  const normalizedFilename=String(filename||'').trim().toLowerCase();
+  const oldIds=new Set((db[importsKey]||[])
+    .filter(report=>String(report.filename||'').trim().toLowerCase()===normalizedFilename&&String(report.reportDate||'')===String(reportDate||''))
+    .map(report=>report.id));
+  if(!oldIds.size)return 0;
+  db[importsKey]=(db[importsKey]||[]).filter(report=>!oldIds.has(report.id));
+  db[rowsKey]=(db[rowsKey]||[]).filter(row=>!oldIds.has(row.importId));
+  return oldIds.size;
 }
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
 function companyName(id){return db.companies.find(c=>c.id===id)?.name||'Unknown Company'}
@@ -682,124 +709,204 @@ function resolveExactCandidateSet(candidates,inputTp,matchType,label){
   }
   return null;
 }
+function candidateIdentity(candidate){
+  return `${candidate.companyId}|${candidate.name}|${number(candidate.rate).toFixed(2)}`;
+}
+function addCandidateReference(map,key,candidate){
+  if(!key)return;
+  if(!map.has(key))map.set(key,new Map());
+  map.get(key).set(candidateIdentity(candidate),candidate);
+}
+function prepareProductForMatch(value){
+  const coreTokens=productCoreTokens(value);
+  return{
+    value:String(value||''),
+    coreTokens,
+    strengthTokens:productStrengthTokens(value),
+    compactName:compactProductName(value),
+    tokenSet:new Set(coreTokens)
+  };
+}
+function preparedCharacterSimilarity(input,candidate){
+  const left=input.compactName,right=candidate.compactName;
+  const maxLength=Math.max(left.length,right.length)||1;
+  return Math.max(0,100-(levenshteinDistance(left,right)/maxLength*100));
+}
+function comparePreparedProductNames(input,candidate){
+  const left=input.coreTokens,right=candidate.coreTokens;
+  if(!left.length||!right.length)return{score:0,common:0,reason:'Product name is empty after normalization.'};
+  if(input.strengthTokens.length&&candidate.strengthTokens.length&&!sameTokenSet(input.strengthTokens,candidate.strengthTokens)){
+    return{score:0,common:0,reason:'The medicine strength, volume, or dosage is different.'};
+  }
+  const leftSet=input.tokenSet,rightSet=candidate.tokenSet;
+  const common=[...leftSet].filter(token=>rightSet.has(token)).length;
+  const shorter=Math.min(leftSet.size,rightSet.size)||1;
+  const coverage=common/shorter;
+  const ordered=lcsLength(left,right)/Math.min(left.length,right.length);
+  const charScore=preparedCharacterSimilarity(input,candidate)/100;
+  let prefix=0;
+  while(prefix<Math.min(left.length,right.length)&&left[prefix]===right[prefix])prefix++;
+  const prefixCoverage=prefix/Math.min(left.length,right.length);
+  let score=(coverage*45)+(ordered*25)+(prefixCoverage*10)+(charScore*20);
+  if(left[0]!==right[0]&&charScore<0.92)score-=18;
+  if((input.strengthTokens.length===0)!==(candidate.strengthTokens.length===0))score-=8;
+  score=Math.max(0,Math.min(100,Math.round(score*10)/10));
+  const requiredCommon=Math.min(2,Math.min(left.length,right.length));
+  if(common<requiredCommon)return{score,common,reason:`Only ${common} important name word${common===1?'':'s'} matched.`};
+  return{score,common,reason:''};
+}
 function buildAreaProductIndex(){
-  const byName=new Map(),byCompactName=new Map(),byTokenBag=new Map(),byCoreBag=new Map(),candidateMap=new Map();
-  const add=(map,key,candidate)=>{
+  const byName=new Map(),byCompactName=new Map(),byTokenBag=new Map(),byCoreBag=new Map();
+  const byCoreToken=new Map(),byPrefix=new Map(),byInitial=new Map(),candidateMap=new Map();
+  const addExact=(map,key,candidate)=>{
     if(!key)return;
     if(!map.has(key))map.set(key,new Map());
-    const companyKey=candidate.companyId;
-    const current=map.get(key).get(companyKey);
-    if(!current||(!current.rate&&candidate.rate))map.get(key).set(companyKey,candidate);
+    const current=map.get(key).get(candidate.companyId);
+    if(!current||(!current.rate&&candidate.rate))map.get(key).set(candidate.companyId,candidate);
   };
   for(const r of db.stock){
     const item=cleanImportedItem(r.item),name=canonicalProductName(item),compactName=compactProductName(item),tokenBag=tokenBagProductName(item),coreBag=coreBagProductName(item);
     if(!name||!r.companyId)continue;
-    const candidate={companyId:r.companyId,group:r.group||'',item:item||'',rate:number(r.rate),name,compactName,tokenBag,coreBag};
-    const candidateKey=`${r.companyId}|${name}|${number(r.rate).toFixed(2)}`;
+    const coreTokens=productCoreTokens(item),strengthTokens=productStrengthTokens(item);
+    const candidate={
+      companyId:r.companyId,group:r.group||'',item:item||'',rate:number(r.rate),name,compactName,tokenBag,coreBag,
+      coreTokens,strengthTokens,tokenSet:new Set(coreTokens),compactLength:compactName.length
+    };
+    const candidateKey=candidateIdentity(candidate);
     candidateMap.set(candidateKey,candidate);
-    productNameVariants(item).forEach(key=>add(byName,key,candidate));
-    compactProductVariants(item).forEach(key=>add(byCompactName,key,candidate));
-    tokenBagProductVariants(item).forEach(key=>add(byTokenBag,key,candidate));
-    coreBagProductVariants(item).forEach(key=>add(byCoreBag,key,candidate));
+    productNameVariants(item).forEach(key=>addExact(byName,key,candidate));
+    compactProductVariants(item).forEach(key=>addExact(byCompactName,key,candidate));
+    tokenBagProductVariants(item).forEach(key=>addExact(byTokenBag,key,candidate));
+    coreBagProductVariants(item).forEach(key=>addExact(byCoreBag,key,candidate));
   }
-  return{byName,byCompactName,byTokenBag,byCoreBag,candidates:[...candidateMap.values()]};
+  const candidates=[...candidateMap.values()];
+  for(const candidate of candidates){
+    for(const token of new Set(candidate.coreTokens))addCandidateReference(byCoreToken,token,candidate);
+    const firstTextToken=candidate.coreTokens.find(token=>/[A-Z]/.test(token)&&!/^[0-9]/.test(token))||candidate.coreTokens[0]||'';
+    if(firstTextToken){
+      addCandidateReference(byPrefix,firstTextToken.slice(0,3),candidate);
+      addCandidateReference(byInitial,firstTextToken.slice(0,1),candidate);
+    }
+  }
+  return{byName,byCompactName,byTokenBag,byCoreBag,byCoreToken,byPrefix,byInitial,candidates,matchCache:new Map()};
+}
+function fuzzyCandidatePool(item,index,input){
+  const pool=new Map();
+  const addBucket=bucket=>{for(const candidate of bucket?.values?.()||[])pool.set(candidateIdentity(candidate),candidate);};
+  const tokenBuckets=[...new Set(input.coreTokens)]
+    .map(token=>index.byCoreToken.get(token))
+    .filter(Boolean)
+    .sort((a,b)=>a.size-b.size);
+  tokenBuckets.slice(0,3).forEach(addBucket);
+
+  const firstTextToken=input.coreTokens.find(token=>/[A-Z]/.test(token)&&!/^[0-9]/.test(token))||input.coreTokens[0]||'';
+  if(pool.size<20&&firstTextToken)addBucket(index.byPrefix.get(firstTextToken.slice(0,3)));
+  if(pool.size===0&&firstTextToken)addBucket(index.byInitial.get(firstTextToken.slice(0,1)));
+
+  let candidates=[...pool.values()];
+  if(candidates.length>250){
+    const inputLength=input.compactName.length;
+    candidates=candidates
+      .map(candidate=>{
+        const common=candidate.coreTokens.reduce((count,token)=>count+(input.tokenSet.has(token)?1:0),0);
+        const lengthPenalty=Math.abs(candidate.compactLength-inputLength);
+        return{candidate,quickScore:(common*100)-lengthPenalty};
+      })
+      .sort((a,b)=>b.quickScore-a.quickScore)
+      .slice(0,250)
+      .map(entry=>entry.candidate);
+  }
+  return candidates;
 }
 function resolveAreaCompany(item,tp,index){
   const name=canonicalProductName(item),inputTp=Math.abs(number(tp));
   if(!name)return{status:'unmatched',reason:'The item name is empty after normalization.'};
+  const cacheKey=`${name}|${inputTp.toFixed(2)}`;
+  const cached=index.matchCache?.get(cacheKey);
+  if(cached)return cached;
+  const finish=result=>{index.matchCache?.set(cacheKey,result);return result;};
 
   // 1) Truly identical names: company is selected by name alone. TP is not required.
   const exact=resolveExactCandidateSet(candidatesForKeys(index.byName,productNameVariants(item)),inputTp,'exact-canonical-name','The exact item name');
-  if(exact)return exact;
+  if(exact)return finish(exact);
 
   // 2) Same letters/numbers with harmless spacing differences.
   const compact=resolveExactCandidateSet(candidatesForKeys(index.byCompactName,compactProductVariants(item)),inputTp,'exact-compact-name','The same compact item name');
-  if(compact)return compact;
+  if(compact)return finish(compact);
 
-  // 3) Same complete words in a different order. Example: SYP 120ML vs 120ML SYP.
+  // 3) Same complete words in a different order.
   const tokenBag=resolveExactCandidateSet(candidatesForKeys(index.byTokenBag,tokenBagProductVariants(item)),inputTp,'exact-token-set-name','The same complete item words');
-  if(tokenBag)return tokenBag;
+  if(tokenBag)return finish(tokenBag);
 
-  // 4) Near-identical extraction: same token count and strength, with only a tiny typo.
-  // This is treated like the same name only when one company is clearly better than all others.
-  const inputTokens=mergedProductTokens(item),inputStrength=productStrengthTokens(item);
-  const nearExact=(index.candidates||[]).map(candidate=>{
-    const candidateTokens=mergedProductTokens(candidate.item);
-    const charScore=characterSimilarity(item,candidate.item);
-    const strengthsOkay=!inputStrength.length||!productStrengthTokens(candidate.item).length||sameTokenSet(inputStrength,productStrengthTokens(candidate.item));
-    return{...candidate,charScore,tokenCountOkay:inputTokens.length===candidateTokens.length,strengthsOkay};
+  const input=prepareProductForMatch(item);
+  const pool=fuzzyCandidatePool(item,index,input);
+
+  // 4) Near-identical extraction: one clear company is enough; TP is ignored.
+  const nearExact=pool.map(candidate=>{
+    const charScore=preparedCharacterSimilarity(input,candidate);
+    const strengthsOkay=!input.strengthTokens.length||!candidate.strengthTokens.length||sameTokenSet(input.strengthTokens,candidate.strengthTokens);
+    return{...candidate,charScore,tokenCountOkay:input.coreTokens.length===candidate.coreTokens.length,strengthsOkay};
   }).filter(candidate=>candidate.tokenCountOkay&&candidate.strengthsOkay&&candidate.charScore>=96)
     .sort((a,b)=>b.charScore-a.charScore);
   if(nearExact.length){
     const bestScore=nearExact[0].charScore;
     const finalists=uniqueCompanyCandidates(nearExact.filter(candidate=>candidate.charScore>=bestScore-0.5));
-    if(finalists.length===1)return{status:'matched',...finalists[0],similarity:Math.round(bestScore*10)/10,matchType:'near-exact-extraction-name'};
+    if(finalists.length===1)return finish({status:'matched',...finalists[0],similarity:Math.round(bestScore*10)/10,matchType:'near-exact-extraction-name'});
     if(finalists.length>1){
       const priced=uniqueCompanyCandidates(finalists.filter(candidate=>productTpMatches(inputTp,candidate.rate)));
-      if(priced.length===1)return{status:'matched',...priced[0],similarity:Math.round(bestScore*10)/10,matchType:'near-exact-extraction-name-tp-disambiguated'};
-      return{status:'ambiguous',similarity:Math.round(bestScore*10)/10,reason:'A near-identical item name was found under more than one company.'};
+      if(priced.length===1)return finish({status:'matched',...priced[0],similarity:Math.round(bestScore*10)/10,matchType:'near-exact-extraction-name-tp-disambiguated'});
+      return finish({status:'ambiguous',similarity:Math.round(bestScore*10)/10,reason:'A near-identical item name was found under more than one company.'});
     }
   }
 
   // 5) A strong, unique name match is enough even when TP differs.
-  // TP is used only to disambiguate when the same strong name points to multiple companies.
-  const strongNameMatches=(index.candidates||[]).map(candidate=>{
-    const comparison=compareProductNames(item,candidate.item);
-    return{...candidate,...comparison};
-  }).filter(candidate=>candidate.score>=90)
+  const strongNameMatches=pool.map(candidate=>({...candidate,...comparePreparedProductNames(input,candidate)}))
+    .filter(candidate=>candidate.score>=90)
     .sort((a,b)=>b.score-a.score);
   if(strongNameMatches.length){
     const bestScore=strongNameMatches[0].score;
     const finalists=uniqueCompanyCandidates(strongNameMatches.filter(candidate=>candidate.score>=bestScore-1));
-    if(finalists.length===1){
-      return{status:'matched',...finalists[0],similarity:bestScore,matchType:'strong-unique-name-no-tp'};
-    }
-    if(finalists.length>1){
-      const priced=uniqueCompanyCandidates(finalists.filter(candidate=>productTpMatches(inputTp,candidate.rate)));
-      if(priced.length===1)return{status:'matched',...priced[0],similarity:bestScore,matchType:'strong-name-tp-disambiguated'};
-      return{status:'ambiguous',similarity:bestScore,reason:`The item name matched more than one company at about ${bestScore.toFixed(1)}%.`};
-    }
+    if(finalists.length===1)return finish({status:'matched',...finalists[0],similarity:bestScore,matchType:'strong-unique-name-no-tp'});
+    const priced=uniqueCompanyCandidates(finalists.filter(candidate=>productTpMatches(inputTp,candidate.rate)));
+    if(priced.length===1)return finish({status:'matched',...priced[0],similarity:bestScore,matchType:'strong-name-tp-disambiguated'});
+    return finish({status:'ambiguous',similarity:bestScore,reason:`The item name matched more than one company at about ${bestScore.toFixed(1)}%.`});
   }
 
   // 6) Names that differ only by form/pack suffixes use TP for confirmation.
   const coreMatches=candidatesForKeys(index.byCoreBag,coreBagProductVariants(item));
   if(coreMatches.length){
-    if(inputTp<=0)return{status:'unmatched',similarity:100,reason:'The core item name matched, but extra form/pack words were different and TP was missing.'};
+    if(inputTp<=0)return finish({status:'unmatched',similarity:100,reason:'The core item name matched, but extra form/pack words were different and TP was missing.'});
     const priced=uniqueCompanyCandidates(coreMatches.filter(candidate=>productTpMatches(inputTp,candidate.rate)));
-    if(priced.length===1)return{status:'matched',...priced[0],similarity:100,matchType:'core-name-extra-suffix-and-tp'};
-    if(priced.length>1)return{status:'ambiguous',similarity:100,reason:'The core item name and TP matched more than one company.'};
+    if(priced.length===1)return finish({status:'matched',...priced[0],similarity:100,matchType:'core-name-extra-suffix-and-tp'});
+    if(priced.length>1)return finish({status:'ambiguous',similarity:100,reason:'The core item name and TP matched more than one company.'});
     const closest=[...coreMatches].sort((a,b)=>Math.abs(inputTp-a.rate)-Math.abs(inputTp-b.rate))[0];
-    return{status:'unmatched',similarity:100,reason:`The core name matched, but TP ${inputTp.toFixed(2)} did not match${closest?` the Stock & Sales TP ${number(closest.rate).toFixed(2)} for ${closest.item}`:''}.`};
+    return finish({status:'unmatched',similarity:100,reason:`The core name matched, but TP ${inputTp.toFixed(2)} did not match${closest?` the Stock & Sales TP ${number(closest.rate).toFixed(2)} for ${closest.item}`:''}.`});
   }
 
-  // 7) Broader fuzzy fallback: TP is mandatory because the name similarity is below 90%.
-  const compared=(index.candidates||[]).map(candidate=>{
-    const comparison=compareProductNames(item,candidate.item);
-    return{...candidate,...comparison};
-  }).filter(candidate=>candidate.score>=72);
-
+  // 7) Broader fuzzy fallback is limited to a small indexed candidate pool.
+  const compared=pool.map(candidate=>({...candidate,...comparePreparedProductNames(input,candidate)})).filter(candidate=>candidate.score>=72);
   if(!compared.length){
-    const best=(index.candidates||[]).map(candidate=>({...candidate,...compareProductNames(item,candidate.item)})).sort((a,b)=>b.score-a.score)[0];
+    const best=pool.map(candidate=>({...candidate,...comparePreparedProductNames(input,candidate)})).sort((a,b)=>b.score-a.score)[0];
     const detail=best?.score?` Closest Stock & Sales item: ${best.item} (${best.score.toFixed(1)}%).`:' The item was not found in the imported Stock & Sales rows.';
-    return{status:'unmatched',reason:`No Stock & Sales item reached the required name similarity.${detail}`};
+    return finish({status:'unmatched',reason:`No Stock & Sales item reached the required name similarity.${detail}`});
   }
   if(inputTp<=0){
     const best=[...compared].sort((a,b)=>b.score-a.score)[0];
-    return{status:'unmatched',similarity:best.score,reason:`The closest name was ${best.item} (${best.score.toFixed(1)}%), but TP was missing for confirmation.`};
+    return finish({status:'unmatched',similarity:best.score,reason:`The closest name was ${best.item} (${best.score.toFixed(1)}%), but TP was missing for confirmation.`});
   }
   const priced=compared.filter(candidate=>productTpMatches(inputTp,candidate.rate));
   if(!priced.length){
     const best=[...compared].sort((a,b)=>b.score-a.score)[0];
     const closest=[...compared].sort((a,b)=>Math.abs(inputTp-a.rate)-Math.abs(inputTp-b.rate))[0];
-    return{status:'unmatched',similarity:best.score,reason:`Closest name: ${best.item} (${best.score.toFixed(1)}%). TP ${inputTp.toFixed(2)} did not match${closest?` Stock & Sales TP ${number(closest.rate).toFixed(2)}`:''}.`};
+    return finish({status:'unmatched',similarity:best.score,reason:`Closest name: ${best.item} (${best.score.toFixed(1)}%). TP ${inputTp.toFixed(2)} did not match${closest?` Stock & Sales TP ${number(closest.rate).toFixed(2)}`:''}.`});
   }
   const bestScore=Math.max(...priced.map(candidate=>candidate.score));
   const finalists=uniqueCompanyCandidates(priced.filter(candidate=>candidate.score>=bestScore-2));
-  if(finalists.length===1)return{status:'matched',...finalists[0],similarity:finalists[0].score,matchType:'fuzzy-name-and-tp'};
-  return{status:'ambiguous',similarity:bestScore,reason:`More than one company matched the item name at about ${bestScore.toFixed(1)}% with the same TP.`};
+  if(finalists.length===1)return finish({status:'matched',...finalists[0],similarity:finalists[0].score,matchType:'fuzzy-name-and-tp'});
+  return finish({status:'ambiguous',similarity:bestScore,reason:`More than one company matched the item name at about ${bestScore.toFixed(1)}% with the same TP.`});
 }
 
-function importAreaWiseMatrix(matrix,filename){
+async function importAreaWiseMatrix(matrix,filename,progress){
   const headerIndex=matrix.findIndex(row=>String(row?.[0]||'').trim().toUpperCase()==='ITEM'&&row.some(v=>String(v||'').trim().toUpperCase()==='TTL QTY'));
   if(headerIndex<0)throw new Error('ITEM / TTL QTY header row was not found');
   const header=matrix[headerIndex].map(v=>String(v??'').trim());
@@ -817,34 +924,38 @@ function importAreaWiseMatrix(matrix,filename){
   const meta={distributor,from:range[1]||'-',to:range[2]||'-',station,institutionSale,valueBy};
   const importId=uid(),reportDate=toIsoDate(meta.to)||new Date().toISOString().slice(0,10);
   const productIndex=buildAreaProductIndex();
-  const newRows=[];const unmatchedItems=[];const ambiguousItems=[];let parsedRows=0;
+  const newRows=[];const unmatchedItems=[];const ambiguousItems=[];let parsedRows=0,processedRows=0;
+  const totalRows=Math.max(1,matrix.length-headerIndex-1);
   for(let ri=headerIndex+1;ri<matrix.length;ri++){
     const row=matrix[ri]||[];const rawItem=String(row[0]||'').trim();
     if(!rawItem||/^G\s*TTL\s*AMT$/i.test(rawItem)||/^(GRAND\s+)?TOTAL$/i.test(rawItem))continue;
-    const item=cleanAreaItem(rawItem),tp=extractAreaTp(rawItem);if(!item)continue;parsedRows++;
+    const item=cleanAreaItem(rawItem),tp=extractAreaTp(rawItem);if(!item)continue;parsedRows++;processedRows++;
     const areas={};
     for(const c of areaColumns){const val=numValue(row[c.index]);if(val!==0)areas[c.name]=val;}
     const totalQty=Number.isFinite(Number(row[totalQtyIndex]))?numValue(row[totalQtyIndex]):Object.values(areas).reduce((a,v)=>a+number(v),0);
     const totalAmount=Number.isFinite(Number(row[totalAmountIndex]))?numValue(row[totalAmountIndex]):totalQty*tp;
     const resolved=resolveAreaCompany(item,tp,productIndex);
     if(resolved.status==='matched')newRows.push({id:uid(),importId,companyId:resolved.companyId,group:resolved.group,item,tp,areas,totalQty,totalAmount,matchType:resolved.matchType||'matched',matchSimilarity:resolved.similarity??100,matchedStockItem:resolved.item||''});
-    else if(resolved.status==='ambiguous')ambiguousItems.push({
-      item,tp,totalQty,totalAmount,
-      reason:resolved.reason||'The item matches more than one company in Sales, Stock & Return data.'
-    });
-    else unmatchedItems.push({
-      item,tp,totalQty,totalAmount,
-      reason:resolved.reason||'No matching item was found in Sales, Stock & Return data.'
-    });
+    else if(resolved.status==='ambiguous')ambiguousItems.push({item,tp,totalQty,totalAmount,reason:resolved.reason||'The item matches more than one company in Sales, Stock & Return data.'});
+    else unmatchedItems.push({item,tp,totalQty,totalAmount,reason:resolved.reason||'No matching item was found in Sales, Stock & Return data.'});
+
+    if(processedRows%50===0){
+      if(progress)progress.textContent=`Matching Area Wise product ${Math.min(ri-headerIndex,totalRows)} of ${totalRows}...`;
+      await yieldToBrowser();
+    }
   }
   const dedup=new Map();
   for(const r of newRows){const key=`${r.companyId}|${normalizeProductName(r.item)}|${number(r.tp).toFixed(2)}`;dedup.set(key,r);}
   const matchedRows=[...dedup.values()];
+  replaceExistingImportedReport('areaWiseImports','areaWiseRows',filename,reportDate);
   db.areaWiseRows.push(...matchedRows);
   db.areaWiseImports.push({id:importId,filename,date:new Date().toISOString(),reportDate,meta,areaCodes,rows:parsedRows,matchedRows:matchedRows.length,unmatchedRows:unmatchedItems.length,ambiguousRows:ambiguousItems.length,unmatchedItems,ambiguousItems});
-  saveDB();
+  if(progress)progress.textContent='Saving Area Wise report...';
+  await yieldToBrowser();
+  await saveDB();
   return{parsedRows,matchedRows:matchedRows.length,unmatchedRows:unmatchedItems.length,ambiguousRows:ambiguousItems.length,areas:areaCodes.length};
 }
+
 function areaImportIssueRecord(issue,status){
   if(issue&&typeof issue==='object')return{
     item:String(issue.item||'Unknown item'),
@@ -874,7 +985,8 @@ function renderAreaImportIssues(report,status){
   const saved=Array.isArray(report[key])?report[key]:[];
   const title=isAmbiguous?'Ambiguous':'Unmatched';
   const statusClass=isAmbiguous?'ambiguous':'unmatched';
-  const rows=saved.map((issue,index)=>{
+  const renderLimit=200,visible=saved.slice(0,renderLimit);
+  const rows=visible.map((issue,index)=>{
     const record=areaImportIssueRecord(issue,status);
     return `<tr><td>${index+1}</td><td class="issue-item-name">${escapeHtml(record.item)}</td><td>${areaIssueValue(record.tp)}</td><td>${areaIssueValue(record.totalQty)}</td><td>${areaIssueValue(record.totalAmount)}</td><td class="issue-reason">${escapeHtml(record.reason)}</td></tr>`;
   }).join('');
@@ -884,13 +996,25 @@ function renderAreaImportIssues(report,status){
   const emptyNote=!saved.length
     ?'<div class="import-issue-note">Details were not saved for this older import. Re-import the Area Wise file to display them.</div>'
     :'';
-  return `<details class="import-issue-details ${statusClass}"><summary>View ${count} ${title.toLowerCase()} result${count===1?'':'s'}</summary>${availabilityNote}${emptyNote}${saved.length?`<div class="import-issue-table-wrap"><table class="import-issue-table"><thead><tr><th>#</th><th>Item</th><th>TP</th><th>TTL QTY</th><th>TTL AMT</th><th>Reason</th></tr></thead><tbody>${rows}</tbody></table></div>`:''}</details>`;
+  const performanceNote=saved.length>renderLimit?`<div class="import-issue-note">Showing the first ${renderLimit} rows to keep the browser responsive. Download the CSV to review all ${saved.length} saved results.</div>`:'';
+  const downloadButton=saved.length?`<button type="button" class="btn btn-outline btn-small" data-download-area-issues="${report.id}" data-area-issue-status="${status}">Download all as CSV</button>`:'';
+  return `<details class="import-issue-details ${statusClass}"><summary>View ${count} ${title.toLowerCase()} result${count===1?'':'s'}</summary>${availabilityNote}${emptyNote}${performanceNote}${downloadButton}${saved.length?`<div class="import-issue-table-wrap"><table class="import-issue-table"><thead><tr><th>#</th><th>Item</th><th>TP</th><th>TTL QTY</th><th>TTL AMT</th><th>Reason</th></tr></thead><tbody>${rows}</tbody></table></div>`:''}</details>`;
 }
 function renderAreaWiseAdminImports(){
   const wrap=$('#areaWiseAdminImports');if(!wrap)return;
   const reports=[...db.areaWiseImports].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   wrap.innerHTML=reports.map(r=>`<div class="area-import-card area-import-card-stacked"><div class="area-import-summary-row"><div><strong>${escapeHtml(r.filename||'Area wise report')}</strong><div class="muted">${displayDate(r.reportDate||r.date)} • ${r.areaCodes?.length||0} areas • ${r.matchedRows??0} company-matched rows</div></div><div class="area-import-counts"><span class="badge active">Matched ${r.matchedRows??0}</span><span class="badge pending">Unmatched ${r.unmatchedRows??0}</span><span class="badge inactive">Ambiguous ${r.ambiguousRows??0}</span></div></div>${renderAreaImportIssues(r,'unmatched')}${renderAreaImportIssues(r,'ambiguous')}</div>`).join('')||'<p class="muted">No area-wise report has been imported.</p>';
 }
+document.addEventListener('click',event=>{
+  const button=event.target.closest('[data-download-area-issues]');if(!button)return;
+  const report=db.areaWiseImports.find(item=>item.id===button.dataset.downloadAreaIssues);if(!report)return;
+  const status=button.dataset.areaIssueStatus==='ambiguous'?'ambiguous':'unmatched';
+  const key=status==='ambiguous'?'ambiguousItems':'unmatchedItems';
+  const rows=(report[key]||[]).map((issue,index)=>{const record=areaImportIssueRecord(issue,status);return[index+1,record.item,record.tp??'',record.totalQty??'',record.totalAmount??'',record.reason];});
+  if(!rows.length)return toast('No issue results are available');
+  const csv=[['#','Item','TP','TTL QTY','TTL AMT','Reason'],...rows].map(row=>row.map(value=>`"${String(value??'').replaceAll('"','""')}"`).join(',')).join('\n');
+  downloadBlob(csv,'text/csv',`${report.filename||'area-wise'}-${status}.csv`);
+});
 
 
 /* Party-wise reporting */
@@ -1049,13 +1173,13 @@ function isPartyAreaHeading(line){
   if(line.words.some(w=>w.x>350&&numericText(w.text)))return false;
   return t===t.toUpperCase()&&/[A-Z]/.test(t)&&Number(line.words[0]?.x||999)<120;
 }
-function parsePartyWisePages(pages,filename){
+async function parsePartyWisePages(pages,filename,progress){
   const productIndex=buildAreaProductIndex();
   const importId=uid(),rawRows=[],unmatchedItems=[],ambiguousItems=[];
   let currentArea='',currentPartyCode='',currentPartyName='';
-  let fullText='';
-  for(const page of pages){
-    const lines=pageLines(page);fullText+=lines.map(l=>l.text).join('\n')+'\n';
+  let fullText='',processedItems=0;
+  for(let pageIndex=0;pageIndex<pages.length;pageIndex++){
+    const page=pages[pageIndex],lines=pageLines(page);fullText+=lines.map(l=>l.text).join('\n')+'\n';
     for(const line of lines){
       const text=String(line.text||'').replace(/\s+/g,' ').trim();if(!text||isPdfNoiseText(text))continue;
       const partyMatch=text.match(/^\((\d+)\)\s+(.+)$/);
@@ -1072,7 +1196,10 @@ function parsePartyWisePages(pages,filename){
       if(resolved.status==='matched')rawRows.push({...base,companyId:resolved.companyId,group:resolved.group,matchType:resolved.matchType||'matched',matchSimilarity:resolved.similarity??100,matchedStockItem:resolved.item||''});
       else if(resolved.status==='ambiguous')ambiguousItems.push({item,partyCode:currentPartyCode,tp:unitTp,reason:resolved.reason||'The item matches more than one company.'});
       else unmatchedItems.push({item,partyCode:currentPartyCode,tp:unitTp,reason:resolved.reason||'No matching Stock & Sales item was found.'});
+      processedItems++;
     }
+    if(progress)progress.textContent=`Matching Party Wise page ${pageIndex+1} of ${pages.length} (${processedItems} items)...`;
+    await yieldToBrowser();
   }
   const printed=(fullText.match(/Printed\s*On\s*:\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/i)||[])[1]||new Date().toLocaleDateString('en-GB');
   const range=fullText.match(/From\s*:\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})\s*To\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/i)||[];
@@ -1082,18 +1209,29 @@ function parsePartyWisePages(pages,filename){
   const dedup=new Map();
   for(const r of rawRows){const key=[r.companyId,r.area,r.partyCode,normalizeProductName(r.item),r.qty,r.bonus,number(r.tpAmount).toFixed(2),number(r.netAmount).toFixed(2)].join('|');dedup.set(key,r);}
   const matchedRows=[...dedup.values()];
+  replaceExistingImportedReport('partyWiseImports','partyWiseRows',filename,reportDate);
   db.partyWiseRows.push(...matchedRows);
-  db.partyWiseImports.push({id:importId,filename,date:new Date().toISOString(),reportDate,meta,rows:matchedRows.length,areas:new Set(matchedRows.map(r=>r.area)).size,parties:new Set(matchedRows.map(partyKey)).size,matchedRows:matchedRows.length,unmatchedRows:unmatchedItems.length,ambiguousRows:ambiguousItems.length,unmatchedItems:unmatchedItems.slice(0,50),ambiguousItems:ambiguousItems.slice(0,50)});
-  saveDB();
+  db.partyWiseImports.push({id:importId,filename,date:new Date().toISOString(),reportDate,meta,rows:matchedRows.length,areas:new Set(matchedRows.map(r=>r.area)).size,parties:new Set(matchedRows.map(partyKey)).size,matchedRows:matchedRows.length,unmatchedRows:unmatchedItems.length,ambiguousRows:ambiguousItems.length,unmatchedItems:unmatchedItems.slice(0,200),ambiguousItems:ambiguousItems.slice(0,200)});
+  if(progress)progress.textContent='Saving Party Wise report...';
+  await yieldToBrowser();
+  await saveDB();
   return{matchedRows:matchedRows.length,unmatchedRows:unmatchedItems.length,ambiguousRows:ambiguousItems.length,areas:new Set(matchedRows.map(r=>r.area)).size,parties:new Set(matchedRows.map(partyKey)).size};
 }
+
 async function readPdfFilePages(file,progress,prefix='Reading page'){
   const pdfjsLib=await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs');
   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
   const bytes=new Uint8Array(await file.arrayBuffer());const pdf=await pdfjsLib.getDocument({data:bytes}).promise;const pages=[];
-  for(let i=1;i<=pdf.numPages;i++){progress.textContent=`${prefix} ${i} of ${pdf.numPages}...`;const page=await pdf.getPage(i);const viewport=page.getViewport({scale:1});const tc=await page.getTextContent();pages.push({pageNumber:i,height:viewport.height,items:tc.items.map(x=>({str:x.str,x:x.transform[4],y:x.transform[5],width:x.width||0}))});}
+  for(let i=1;i<=pdf.numPages;i++){
+    progress.textContent=`${prefix} ${i} of ${pdf.numPages}...`;
+    const page=await pdf.getPage(i),viewport=page.getViewport({scale:1}),tc=await page.getTextContent();
+    pages.push({pageNumber:i,height:viewport.height,items:tc.items.map(x=>({str:x.str,x:x.transform[4],y:x.transform[5],width:x.width||0}))});
+    page.cleanup?.();
+    if(i%2===0)await yieldToBrowser();
+  }
   return pages;
 }
+
 function stockCsvHeaderIndex(matrix){
   return matrix.findIndex(row=>{
     const names=(row||[]).map(normalizedColumnName);
@@ -1193,12 +1331,13 @@ function areaPdfPagesToMatrix(pages){
 function partyCsvHeaderIndex(matrix){
   return matrix.findIndex(row=>{const names=(row||[]).map(normalizedColumnName);return names.includes('ITEM')&&names.some(v=>v==='QTY'||v==='QUANTITY')&&names.some(v=>v==='NET'||v==='NET AMOUNT');});
 }
-function importPartyWiseCsvMatrix(matrix,filename){
+async function importPartyWiseCsvMatrix(matrix,filename,progress){
   const headerIndex=partyCsvHeaderIndex(matrix);if(headerIndex<0)throw new Error('CSV header must contain ITEM, QTY and NET AMOUNT columns');
   const header=matrix[headerIndex]||[];
   const col={area:findCsvColumn(header,['AREA','AREA NAME']),partyCode:findCsvColumn(header,['PARTY CODE','CODE']),party:findCsvColumn(header,['PARTY','PARTY NAME','CUSTOMER','CUSTOMER NAME']),item:findCsvColumn(header,['ITEM','ITEM NAME','PRODUCT']),qty:findCsvColumn(header,['QTY','QUANTITY']),bonus:findCsvColumn(header,['BONUS','BONUS QTY']),unitTp:header.map(normalizedColumnName).findIndex(v=>['TP','UNIT TP','RATE','TRADE PRICE'].includes(v)),tpAmount:findCsvColumn(header,['TP AMOUNT','TP AMT','AMOUNT TP']),netAmount:findCsvColumn(header,['NET AMOUNT','NET']),reportDate:findCsvColumn(header,['REPORT DATE','PRINTED ON','DATE'])};
   const productIndex=buildAreaProductIndex(),importId=uid(),rawRows=[],unmatchedItems=[],ambiguousItems=[];
   let currentArea='',currentPartyCode='',currentPartyName='';
+  const totalRows=Math.max(1,matrix.length-headerIndex-1);
   for(let i=headerIndex+1;i<matrix.length;i++){
     const row=matrix[i]||[],first=String(row[0]||'').trim(),joined=row.filter(v=>String(v||'').trim()).join(' ').trim();
     if(!joined)continue;
@@ -1217,40 +1356,45 @@ function importPartyWiseCsvMatrix(matrix,filename){
     const netAmount=col.netAmount>=0?numValue(row[col.netAmount]):tpAmount;
     const resolved=resolveAreaCompany(item,unitTp,productIndex),base={id:uid(),importId,area,partyCode,partyName:partyText||'Unknown Party',item,qty,bonus,unitTp:Number(unitTp.toFixed(2)),tpAmount,netAmount,sourceDate:col.reportDate>=0?String(row[col.reportDate]||''):''};
     if(resolved.status==='matched')rawRows.push({...base,companyId:resolved.companyId,group:resolved.group,matchType:resolved.matchType||'matched',matchSimilarity:resolved.similarity??100,matchedStockItem:resolved.item||''});else if(resolved.status==='ambiguous')ambiguousItems.push({item,partyCode,tp:unitTp,reason:resolved.reason||'The item matches more than one company.'});else unmatchedItems.push({item,partyCode,tp:unitTp,reason:resolved.reason||'No matching Stock & Sales item was found.'});
+    if((i-headerIndex)%75===0){if(progress)progress.textContent=`Matching Party Wise row ${Math.min(i-headerIndex,totalRows)} of ${totalRows}...`;await yieldToBrowser();}
   }
   const text=matrixText(matrix),meta=reportMetaFromText(text,'TAWAKAL ENTERPRISES CHANNEL-II'),csvDate=rawRows.map(r=>r.sourceDate).find(toIsoDate)||'';
   const reportDate=toIsoDate(csvDate)||toIsoDate(meta.printedOn)||toIsoDate(meta.to)||new Date().toISOString().slice(0,10);
   const dedup=new Map();for(const r of rawRows){const key=[r.companyId,r.area,r.partyCode,normalizeProductName(r.item),r.qty,r.bonus,number(r.tpAmount).toFixed(2),number(r.netAmount).toFixed(2)].join('|');dedup.set(key,r);}
-  const matchedRows=[...dedup.values()];db.partyWiseRows.push(...matchedRows);
-  db.partyWiseImports.push({id:importId,filename,date:new Date().toISOString(),reportDate,meta,rows:matchedRows.length,areas:new Set(matchedRows.map(r=>r.area)).size,parties:new Set(matchedRows.map(partyKey)).size,matchedRows:matchedRows.length,unmatchedRows:unmatchedItems.length,ambiguousRows:ambiguousItems.length,unmatchedItems:unmatchedItems.slice(0,50),ambiguousItems:ambiguousItems.slice(0,50),format:'csv'});saveDB();
+  const matchedRows=[...dedup.values()];
+  replaceExistingImportedReport('partyWiseImports','partyWiseRows',filename,reportDate);
+  db.partyWiseRows.push(...matchedRows);
+  db.partyWiseImports.push({id:importId,filename,date:new Date().toISOString(),reportDate,meta,rows:matchedRows.length,areas:new Set(matchedRows.map(r=>r.area)).size,parties:new Set(matchedRows.map(partyKey)).size,matchedRows:matchedRows.length,unmatchedRows:unmatchedItems.length,ambiguousRows:ambiguousItems.length,unmatchedItems:unmatchedItems.slice(0,200),ambiguousItems:ambiguousItems.slice(0,200),format:'csv'});
+  if(progress)progress.textContent='Saving Party Wise report...';await yieldToBrowser();await saveDB();
   return{matchedRows:matchedRows.length,unmatchedRows:unmatchedItems.length,ambiguousRows:ambiguousItems.length,areas:new Set(matchedRows.map(r=>r.area)).size,parties:new Set(matchedRows.map(partyKey)).size};
 }
 
 $('#extractPartyWiseBtn').addEventListener('click',async()=>{
   const file=$('#partyWiseFile').files[0];if(!file)return toast('Select a Party Wise PDF or CSV file first');
-  const progress=$('#partyWiseProgress');
+  const progress=$('#partyWiseProgress'),button=$('#extractPartyWiseBtn');button.disabled=true;
   try{
     let summary;
     if(isPdfUpload(file)){
       progress.textContent='Loading PDF engine...';
       const pages=await readPdfFilePages(file,progress,'Reading party report page');
       progress.textContent='Matching party items with company stock data...';
-      summary=parsePartyWisePages(pages,file.name);
+      summary=await parsePartyWisePages(pages,file.name,progress);
     }else if(isCsvUpload(file)){
       progress.textContent='Reading Party Wise CSV...';
       const matrix=await readCsvMatrix(file);
       progress.textContent='Matching party items with company stock data...';
-      summary=importPartyWiseCsvMatrix(matrix,file.name);
+      summary=await importPartyWiseCsvMatrix(matrix,file.name,progress);
     }else throw new Error('Unsupported Party Wise file format');
     progress.textContent='Import complete.';
     $('#partyWiseSummary').innerHTML=`<div class="demo-box"><strong>${summary.matchedRows}</strong> rows matched to companies<br><strong>${summary.unmatchedRows}</strong> rows could not be matched<br><strong>${summary.ambiguousRows}</strong> rows matched more than one company<br><strong>${summary.parties}</strong> parties across <strong>${summary.areas}</strong> areas</div>${summary.matchedRows===0?'<div class="warning-box">No company rows were matched. Import the Sales, Stock & Return report first, then upload this Party Wise report again.</div>':''}`;
     renderAdmin();toast(`Party-wise ${uploadExtension(file).toUpperCase()} processed successfully`);
   }catch(err){console.error(err);progress.textContent=`Import failed. ${err.message||'Use the supplied Party Wise PDF or a CSV with Area, Party, Item, Qty, Bonus, TP Amount and Net Amount columns.'}`;toast('Could not import Party Wise report');}
+  finally{button.disabled=false;}
 });
 
 $('#extractAreaWiseBtn').addEventListener('click',async()=>{
   const file=$('#areaWiseFile').files[0];if(!file)return toast('Select an Area Wise PDF or CSV file first');
-  const progress=$('#areaWiseProgress');
+  const progress=$('#areaWiseProgress'),button=$('#extractAreaWiseBtn');button.disabled=true;
   try{
     let matrix;
     if(isPdfUpload(file)){
@@ -1267,11 +1411,12 @@ $('#extractAreaWiseBtn').addEventListener('click',async()=>{
       matrix=window.XLSX.utils.sheet_to_json(sheet,{header:1,raw:true,defval:null});
     }else throw new Error('Unsupported Area Wise file format');
     progress.textContent='Matching products with company stock data...';
-    const summary=importAreaWiseMatrix(matrix,file.name);
+    const summary=await importAreaWiseMatrix(matrix,file.name,progress);
     progress.textContent='Import complete.';
     $('#areaWiseSummary').innerHTML=`<div class="demo-box"><strong>${summary.matchedRows}</strong> rows matched to companies<br><strong>${summary.unmatchedRows}</strong> rows could not be matched<br><strong>${summary.ambiguousRows}</strong> rows matched more than one company<br><strong>${summary.areas}</strong> area columns detected</div>${summary.unmatchedRows||summary.ambiguousRows?'<div class="info-box">Open the imported report below to view every unmatched and ambiguous item with TP, total quantity, total amount, and the matching reason.</div>':''}${summary.matchedRows===0?'<div class="warning-box">No company rows were matched. Import the Sales, Stock & Return report first, then upload this Area Wise report again.</div>':''}`;
     renderAdmin();toast(`Area-wise ${uploadExtension(file).toUpperCase()} processed successfully`);
   }catch(err){console.error(err);progress.textContent=`Import failed. ${err.message||'Use the same Area Wise table layout in PDF or CSV format.'}`;toast('Could not import Area Wise report');}
+  finally{button.disabled=false;}
 });
 
 $('#extractPdfBtn').addEventListener('click',async()=>{
