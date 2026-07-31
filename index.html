@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ARBY Pharma Distribution Portal</title>
+  <title>Tawakal Enterprises</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -24,7 +24,7 @@
   </div>
 
   <header class="simple-header">
-    <div class="simple-brand">Pharma Reporting Demo</div>
+    <div class="simple-brand">Tawakal Enterprises</div>
     <div class="nav-actions hidden" id="publicNav"></div>
     <div class="nav-actions hidden" id="privateNav">
       <span id="loggedUserLabel" class="user-label"></span>
@@ -67,8 +67,8 @@
     </section>
 
     <section id="view-admin" class="view dashboard-view">
-      <div class="dashboard-header">
-        <div><h2>Dashboard</h2></div>
+      <div class="dashboard-header admin-dashboard-header">
+        <div class="admin-dashboard-title"><h2>Dashboard</h2></div>
         <div class="stat-grid" id="adminStats"></div>
       </div>
       <div class="tabs">
@@ -78,7 +78,6 @@
         <button class="tab" data-tab="admin-import">Stock &amp; Sales Import</button>
         <button class="tab" data-tab="admin-area-import">Area Wise Import</button>
         <button class="tab" data-tab="admin-party-import">Party Wise Import</button>
-        <button class="tab" data-tab="admin-data">Stock Data</button>
       </div>
 
       <div id="admin-overview" class="tab-panel active">
@@ -112,6 +111,41 @@
           <div id="importProgress" class="progress-text"></div>
           <div id="importSummary"></div>
         </div>
+
+        <div class="panel">
+          <h3>Extracted Stock Files</h3>
+          <p class="muted">Deactivate a file to hide it from employees without removing its data, or delete it permanently.</p>
+          <div id="stockAdminImports"></div>
+        </div>
+
+        <div class="panel stock-data-filter-panel">
+          <div class="stock-preview-heading">
+            <div>
+              <h3>Stock Data Preview</h3>
+              <p class="muted">Report: <strong id="adminStockPreviewReportName">No report selected</strong></p>
+            </div>
+            <div class="admin-preview-tools">
+              <label>Date<select id="adminStockPreviewDateRange"><option value="lastDay" selected>Last Day</option><option value="all">All Dates</option></select></label>
+              <label>Report<select id="adminStockPreviewReport"><option value="">Latest report</option></select></label>
+              <div id="adminImportStockPreviewStats" class="stock-preview-stats"></div>
+            </div>
+          </div>
+          <div class="filters">
+            <label>Search item<input id="adminImportStockSearch" placeholder="Product name"></label>
+            <label>Company<select id="adminImportStockCompany"><option value="">All companies</option></select></label>
+            <label>Group<select id="adminImportStockGroup"><option value="">All groups</option></select></label>
+            <label>Stock status<select id="adminImportStockStatus"><option value="">All</option><option value="positive">Positive</option><option value="zero">Zero</option><option value="negative">Negative</option></select></label>
+            <label>Min sale qty<input id="adminImportStockMinSale" type="number"></label>
+            <label>Min closing qty<input id="adminImportStockMinClosing" type="number"></label>
+            <label>Sort by<select id="adminImportStockSort"><option value="item">Item</option><option value="saleDesc">Net Sale (High-Low)</option><option value="closingDesc">Closing (High-Low)</option><option value="amountDesc">Amount (High-Low)</option></select></label>
+          </div>
+          <div class="filter-actions">
+            <button id="resetAdminImportStockFilters" class="btn btn-outline" type="button">Reset Filters</button>
+          </div>
+          <div id="adminImportStockTableWrap" class="same-page-stock-preview"></div>
+        </div>
+
+
       </div>
 
       <div id="admin-area-import" class="tab-panel">
@@ -130,6 +164,19 @@
           <h3>Imported Area Wise Reports</h3>
           <p class="muted">Expand an imported report to review its unmatched and ambiguous items, including TP, total quantity, total amount, and the reason it could not be assigned to a company.</p>
           <div id="areaWiseAdminImports"></div>
+        </div>
+        <div class="panel admin-report-preview-panel">
+          <div class="stock-preview-heading">
+            <div>
+              <h3>Area Wise Report Preview</h3>
+              <p class="muted">Report: <strong id="adminAreaPreviewReportName">No report selected</strong></p>
+            </div>
+            <div class="admin-preview-tools">
+              <label>Date<select id="adminAreaPreviewDateRange"><option value="lastDay" selected>Last Day</option><option value="all">All Dates</option></select></label>
+              <label>Report<select id="adminAreaPreviewReport"><option value="">Latest report</option></select></label>
+            </div>
+          </div>
+          <div id="adminAreaPreviewTableWrap" class="same-page-stock-preview"></div>
         </div>
       </div>
 
@@ -150,17 +197,26 @@
           <h3>Imported Party Wise Reports</h3>
           <div id="partyWiseAdminImports"></div>
         </div>
+        <div class="panel admin-report-preview-panel">
+          <div class="stock-preview-heading">
+            <div>
+              <h3>Party Wise Report Preview</h3>
+              <p class="muted">Report: <strong id="adminPartyPreviewReportName">No report selected</strong></p>
+            </div>
+            <div class="admin-preview-tools">
+              <label>Date<select id="adminPartyPreviewDateRange"><option value="lastDay" selected>Last Day</option><option value="all">All Dates</option></select></label>
+              <label>Report<select id="adminPartyPreviewReport"><option value="">Latest report</option></select></label>
+            </div>
+          </div>
+          <div id="adminPartyPreviewTableWrap" class="same-page-stock-preview"></div>
+        </div>
       </div>
 
-      <div id="admin-data" class="tab-panel">
-        <div class="panel"><h3>All stock records</h3><div id="adminTableWrap"></div></div>
-      </div>
     </section>
 
     <section id="view-employee" class="view dashboard-view">
-      <div class="dashboard-header">
+      <div class="dashboard-header employee-dashboard-header">
         <div><h2 id="employeeCompanyTitle">Company Reports</h2></div>
-        <div class="stat-grid" id="employeeStats"></div>
       </div>
 
       <div class="employee-report-tabs" role="tablist" aria-label="Employee reporting type">
@@ -176,16 +232,21 @@
               <h3>Available Reports</h3>
               <p class="muted">Latest report appears first. Click a report card to open its stock data.</p>
             </div>
-            <div class="date-filters">
-              <label>From date<input id="reportDateFrom" type="date"></label>
-              <label>To date<input id="reportDateTo" type="date"></label>
-              <button id="resetReportDates" class="btn btn-outline" type="button">Reset dates</button>
+            <div class="last-seven-days-card" aria-label="Last 7 Days">
+              <span>Last 7 Days</span>
             </div>
           </div>
           <div id="employeeReportCards" class="report-cards"></div>
         </div>
 
         <div class="panel filter-panel">
+          <div class="stock-preview-heading">
+            <div>
+              <h3>Stock Data Filters</h3>
+              <p class="muted">Filter the report below. The preview updates on this same page.</p>
+            </div>
+            <div id="employeeStockPreviewStats" class="stock-preview-stats"></div>
+          </div>
           <div class="filters">
             <label>Search item<input id="filterSearch" placeholder="Product name"></label>
             <label>Group<select id="filterGroup"><option value="">All groups</option></select></label>
@@ -218,10 +279,8 @@
               <h3>Available Area Wise Reports</h3>
               <p class="muted">Only area-wise rows matched to your company are available here.</p>
             </div>
-            <div class="date-filters">
-              <label>From date<input id="areaReportDateFrom" type="date"></label>
-              <label>To date<input id="areaReportDateTo" type="date"></label>
-              <button id="resetAreaReportDates" class="btn btn-outline" type="button">Reset dates</button>
+            <div class="last-seven-days-card" aria-label="Last 7 Days">
+              <span>Last 7 Days</span>
             </div>
           </div>
           <div id="employeeAreaReportCards" class="report-cards"></div>
@@ -258,10 +317,8 @@
               <h3>Available Party Wise Reports</h3>
               <p class="muted">Only party rows containing products matched to your company are shown.</p>
             </div>
-            <div class="date-filters">
-              <label>From date<input id="partyReportDateFrom" type="date"></label>
-              <label>To date<input id="partyReportDateTo" type="date"></label>
-              <button id="resetPartyReportDates" class="btn btn-outline" type="button">Reset dates</button>
+            <div class="last-seven-days-card" aria-label="Last 7 Days">
+              <span>Last 7 Days</span>
             </div>
           </div>
           <div id="employeePartyReportCards" class="report-cards"></div>

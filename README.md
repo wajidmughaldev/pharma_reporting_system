@@ -1,16 +1,16 @@
-# Pharma Demo Area & Party Wise V12
+# Tawakal Enterprises Reporting Demo - V21
 
-This version fixes the browser "Page Unresponsive" problem during large Area Wise and Party Wise imports.
+This build continues V20 and changes PDF Preview / Download to follow the dashboard report layout instead of the imported/source-file visual layout.
 
-## What changed
+## PDF output format
 
-- Product matching now uses indexed candidate lookup instead of comparing every imported row with every Stock & Sales row.
-- Repeated product names are matched once and reused from an in-memory cache.
-- Area Wise and Party Wise matching runs in small batches and yields control back to the browser between batches.
-- Party Wise PDF processing updates progress page by page.
-- Import buttons are disabled while processing to prevent duplicate imports.
-- Re-importing the same filename and report date replaces the prior copy instead of continuously increasing browser storage.
-- Large unmatched lists render only the first 200 rows in the Admin panel; all saved results can be downloaded as CSV.
-- Existing V11 product-name matching behavior is preserved.
+- Stock: same dashboard grouping, multi-row stock table header, rows and totals.
+- Area Wise: same dashboard matrix with ITEM, visible non-empty area columns, TTL QTY, TTL AMT and G TTL AMT.
+- Party Wise: same dashboard Invoice/Return/Party info row, item rows, invoice totals and Grand Total.
+- PDF report headings follow the dashboard report heading and company badge information.
+- All PDFs are portrait.
+- Stock uses portrait A3 because of the large number of columns.
+- Area Wise uses portrait A4 or A3 based on the number of visible area columns.
+- Party Wise uses portrait A4.
 
-Replace `app.js`, refresh with Ctrl+F5, and import Sales, Stock & Return before Area Wise or Party Wise.
+No re-import of existing reports is required.

@@ -1,25 +1,19 @@
-PERFORMANCE FIX V12
+TAWAKAL ENTERPRISES - V21
 
-Replace this file in your existing project root:
+Replace these files in your existing project root:
 
-  app.js
+- index.html
+- app.js
+- styles.css
 
-STEPS
-1. Replace app.js.
-2. Refresh the browser using Ctrl + F5.
-3. Login as Admin.
-4. Import Sales, Stock & Return first.
-5. Import Area Wise or Party Wise.
-6. Keep the tab open while the progress message advances.
+Keep your existing browser/localStorage data. No report re-import is required for this PDF formatting update.
 
-WHAT WAS FIXED
-- Large Area Wise and 350-page Party Wise reports no longer run one massive synchronous matching loop.
-- Matching now runs in small browser-friendly batches.
-- Product matching is indexed and cached, so repeated medicines are resolved once.
-- The same report import replaces its previous copy, preventing browser storage from growing on every test.
-- Admin unmatched tables are capped at 200 visible rows to protect the page. Use "Download all as CSV" for the complete saved list.
-
-DATA NOTES
-- Existing saved reports remain available.
-- Re-importing the same filename and report date replaces only that same imported report.
-- Product-name matching rules from V11 remain active.
+V21 change:
+- PDF Preview and PDF Download now mirror the SAME report layout shown inside the Employee Dashboard report panel.
+- Stock PDF keeps the dashboard group heading + dashboard stock table + totals, in portrait.
+- Area Wise PDF keeps the exact dashboard ITEM / Area / TTL QTY / TTL AMT matrix, in portrait.
+- Party Wise PDF keeps the dashboard invoice/party rows, item rows, totals and Grand Total, in portrait.
+- Dashboard-style light table headers, borders, alignment and report heading are used in the generated PDFs.
+- Stock uses portrait A3 because the dashboard table is very wide.
+- Area Wise uses portrait A4 or portrait A3 depending on visible area columns.
+- Party Wise uses portrait A4.

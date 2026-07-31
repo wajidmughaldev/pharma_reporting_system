@@ -144,3 +144,48 @@
 @media(max-width:800px){
   .area-import-summary-row{align-items:flex-start;flex-direction:column}
 }
+
+/* V13: shared Stock Data filter + same-page preview */
+.stock-data-filter-panel{margin-bottom:18px}
+.stock-preview-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}
+.stock-preview-heading h3{margin:0 0 5px}
+.stock-preview-heading .muted{margin:0}
+.stock-preview-stats{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.stock-preview-stats span{display:inline-flex;align-items:center;gap:5px;padding:7px 9px;border:1px solid var(--border);background:#f8fafc;border-radius:3px;color:var(--muted);font-size:12px;white-space:nowrap}
+.stock-preview-stats b{color:var(--text);font-size:13px}
+#admin-data .filters{grid-template-columns:repeat(4,minmax(160px,1fr))}
+#admin-data .table-scroll-shell,#employeeStockReporting .table-scroll-shell{margin-top:2px}
+@media(max-width:1100px){#admin-data .filters{grid-template-columns:repeat(2,minmax(160px,1fr))}}
+@media(max-width:600px){.stock-preview-heading{display:block}.stock-preview-stats{justify-content:flex-start;margin-top:12px}#admin-data .filters{grid-template-columns:1fr}}
+
+
+/* V14: Admin dashboard heading first, cards underneath */
+#view-admin .admin-dashboard-header{display:block;align-items:initial}
+#view-admin .admin-dashboard-title{width:100%}
+#view-admin .admin-dashboard-header #adminStats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;width:100%;margin-top:18px}
+#view-admin .admin-dashboard-header #adminStats .stat{min-width:0;width:100%}
+@media(max-width:600px){#view-admin .admin-dashboard-header #adminStats{grid-template-columns:1fr 1fr}}
+@media(max-width:420px){#view-admin .admin-dashboard-header #adminStats{grid-template-columns:1fr}}
+
+
+/* V15: extracted file actions + same-page Stock import preview */
+.same-page-stock-preview{margin-top:18px;border-top:1px solid var(--border);padding-top:18px}
+.extracted-file-card{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--border)}
+.extracted-file-card:last-child{border-bottom:0}
+.extracted-file-info{min-width:0;display:flex;flex-direction:column;gap:5px}
+.extracted-file-actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.area-import-controls{display:flex;align-items:flex-end;gap:10px;flex-direction:column}
+.btn-small{padding:6px 9px;font-size:13px}
+@media(max-width:850px){.extracted-file-card{align-items:flex-start;flex-direction:column}.area-import-controls{align-items:flex-start}.extracted-file-actions{flex-wrap:wrap}}
+.last-seven-days-card{display:flex;align-items:center;justify-content:center;min-width:150px;padding:11px 16px;border:1px solid var(--border);background:#fff;font-weight:700;font-size:14px;border-radius:4px}
+.employee-dashboard-header{display:block}
+
+/* V17: Admin report previews for Stock, Area Wise and Party Wise */
+.admin-report-preview-panel{margin-top:18px}
+.admin-preview-tools{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.admin-preview-tools label{display:flex;flex-direction:column;gap:6px;min-width:260px;font-size:12px;font-weight:700;color:var(--muted)}
+.admin-preview-tools select{min-width:260px;background:#fff}
+#adminAreaPreviewTableWrap,#adminPartyPreviewTableWrap{max-width:100%;overflow:hidden}
+#adminAreaPreviewTableWrap .table-wrap,#adminPartyPreviewTableWrap .table-wrap{max-height:620px;overflow:auto}
+#adminAreaPreviewTableWrap .data-table,#adminPartyPreviewTableWrap .data-table{margin-top:0}
+@media(max-width:700px){.admin-preview-tools{justify-content:flex-start;width:100%}.admin-preview-tools label,.admin-preview-tools select{min-width:100%;width:100%}}
