@@ -525,66 +525,107 @@ function openTextPreview(title,text){
   popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{margin:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif}.toolbar{position:sticky;top:0;background:#fff;border-bottom:1px solid #d1d5db;padding:12px 18px;font-weight:700}.content{padding:20px}.sheet{max-width:1100px;margin:auto;background:#fff;border:1px solid #d1d5db;padding:22px;white-space:pre;overflow:auto;font:13px/1.5 "Courier New",monospace}</style></head><body><div class="toolbar">TXT Preview — ${escapeHtml(title)}</div><div class="content"><pre class="sheet">${escapeHtml(text)}</pre></div></body></html>`);
   popup.document.close();popup.focus();
 }
-function asciiPdfText(value){
-  return String(value??'').replace(/\t/g,'    ').replace(/[\u0000-\u001F\u007F-\uFFFF]/g,ch=>ch==='\n'?'\n':'?');
+const PDF_TABLE_LIBRARY_SOURCES={
+  jsPDF:[
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js'
+  ],
+  autoTable:[
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js',
+    'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js'
+  ]
+};
+let pdfTableLibrariesPromise=null;
+function hasJsPdfLibrary(){return typeof window.jspdf?.jsPDF==='function';}
+function hasJsPdfAutoTable(){
+  const jsPDF=window.jspdf?.jsPDF;
+  if(typeof jsPDF!=='function')return false;
+  if(typeof jsPDF.API?.autoTable==='function')return true;
+  try{return typeof new jsPDF().autoTable==='function';}catch{return false;}
 }
-function escapePdfLiteral(value){return asciiPdfText(value).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');}
-function wrapPdfTextLine(line,maxChars=105){
-  const value=asciiPdfText(line);
-  if(value.length<=maxChars)return[value];
-  const parts=[];let rest=value;
-  while(rest.length>maxChars){let cut=rest.lastIndexOf(' ',maxChars);if(cut<Math.floor(maxChars*.6))cut=maxChars;parts.push(rest.slice(0,cut));rest=rest.slice(cut).trimStart();}
-  parts.push(rest);return parts;
+function appendPdfLibraryScript(src){
+  return new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src=src;script.async=true;script.dataset.pdfTableLibrary='true';
+    script.onload=()=>resolve(src);
+    script.onerror=()=>{script.remove();reject(new Error(`Unable to load ${src}`));};
+    document.head.appendChild(script);
+  });
 }
-function buildSimpleTextPdfBlob(text){
-  const logicalLines=String(text||'').split(/\r?\n/).map(asciiPdfText);
-  const longest=Math.max(1,...logicalLines.map(line=>line.length));
-  // A3 portrait is used for very wide source reports; everything remains portrait.
-  const useA3=longest>120,pageWidth=useA3?842:595,pageHeight=useA3?1191:842;
-  const usableWidth=pageWidth-56;
-  const fontSize=Math.max(3.0,Math.min(6.2,usableWidth/(longest*.6)));
-  const leading=fontSize+2.2;
-  const linesPerPage=Math.max(20,Math.floor((pageHeight-54)/leading));
-  const pages=[];
-  for(let i=0;i<logicalLines.length;i+=linesPerPage)pages.push(logicalLines.slice(i,i+linesPerPage));
-  if(!pages.length)pages.push(['']);
-  const pageCount=pages.length,fontId=3+(pageCount*2),maxId=fontId,objects=new Array(maxId+1);
-  objects[1]='<< /Type /Catalog /Pages 2 0 R >>';
-  const kids=[];
-  for(let i=0;i<pageCount;i++)kids.push(`${3+i*2} 0 R`);
-  objects[2]=`<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pageCount} >>`;
-  for(let i=0;i<pageCount;i++){
-    const pageId=3+i*2,contentId=4+i*2;
-    objects[pageId]=`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`;
-    const commands=['BT',`/F1 ${fontSize.toFixed(2)} Tf`,`28 ${pageHeight-26} Td`,`${leading.toFixed(2)} TL`];
-    pages[i].forEach(line=>{commands.push(`(${escapePdfLiteral(line)}) Tj`,'T*');});
-    commands.push('ET');
-    const stream=commands.join('\n');
-    objects[contentId]=`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+async function loadPdfLibraryFromSources(sources,readyCheck,label){
+  if(readyCheck())return;
+  let lastError=null;
+  for(const src of sources){
+    try{
+      await appendPdfLibraryScript(src);
+      if(readyCheck())return;
+      lastError=new Error(`${label} loaded but did not initialize correctly.`);
+    }catch(err){lastError=err;}
   }
-  objects[fontId]='<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>';
-  let pdf='%PDF-1.4\n%Tawakal Enterprises\n',offsets=new Array(maxId+1).fill(0);
-  for(let id=1;id<=maxId;id++){offsets[id]=pdf.length;pdf+=`${id} 0 obj\n${objects[id]}\nendobj\n`;}
-  const xrefOffset=pdf.length;
-  pdf+=`xref\n0 ${maxId+1}\n0000000000 65535 f \n`;
-  for(let id=1;id<=maxId;id++)pdf+=`${String(offsets[id]).padStart(10,'0')} 00000 n \n`;
-  pdf+=`trailer\n<< /Size ${maxId+1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  return new Blob([pdf],{type:'application/pdf'});
+  throw lastError||new Error(`${label} could not be loaded.`);
 }
-function pdfBlobFromDocOrText(doc,text){
-  if(doc){try{return doc.output('blob');}catch(err){console.warn('jsPDF blob output failed; using built-in PDF fallback.',err);}}
-  if(!text)return null;
-  return buildSimpleTextPdfBlob(text);
+async function ensurePdfTableLibraries(){
+  if(hasJsPdfLibrary()&&hasJsPdfAutoTable())return true;
+  if(!pdfTableLibrariesPromise){
+    pdfTableLibrariesPromise=(async()=>{
+      await loadPdfLibraryFromSources(PDF_TABLE_LIBRARY_SOURCES.jsPDF,hasJsPdfLibrary,'jsPDF');
+      await loadPdfLibraryFromSources(PDF_TABLE_LIBRARY_SOURCES.autoTable,hasJsPdfAutoTable,'jsPDF AutoTable');
+      if(!hasJsPdfLibrary()||!hasJsPdfAutoTable())throw new Error('The PDF table libraries are unavailable.');
+      return true;
+    })().catch(err=>{pdfTableLibrariesPromise=null;throw err;});
+  }
+  try{return await pdfTableLibrariesPromise;}
+  catch(err){
+    console.error('PDF table libraries failed to load.',err);
+    toast('PDF table tools could not be loaded. Check your internet connection and refresh the page.');
+    return false;
+  }
 }
-function openPdfPreview(blob){
-  if(!blob)return false;
-  const url=URL.createObjectURL(blob),popup=window.open(url,'_blank');
-  if(!popup){URL.revokeObjectURL(url);toast('Allow pop-ups to preview the PDF report');return false;}
-  popup.focus();setTimeout(()=>URL.revokeObjectURL(url),60000);return true;
+function pdfBlobFromTableDoc(doc){
+  if(!doc||typeof doc.output!=='function')return null;
+  try{
+    const blob=doc.output('blob');
+    if(!(blob instanceof Blob)||blob.size===0)throw new Error('The generated PDF is empty.');
+    return blob;
+  }catch(err){
+    console.error('Table PDF blob generation failed.',err);
+    toast('The table PDF could not be generated. Please try again.');
+    return null;
+  }
+}
+async function createTablePdfBlob(buildDoc){
+  if(!(await ensurePdfTableLibraries()))return null;
+  try{return pdfBlobFromTableDoc(buildDoc());}
+  catch(err){
+    console.error('Table PDF generation failed.',err);
+    toast('The table PDF could not be generated. Please try again.');
+    return null;
+  }
+}
+function showPdfPreviewLoading(popup){
+  popup.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Preparing PDF</title><style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827}.card{background:#fff;border:1px solid #d1d5db;border-radius:10px;padding:22px 28px;box-shadow:0 8px 24px rgba(0,0,0,.08);font-weight:700}</style></head><body><div class="card">Preparing table PDF...</div></body></html>');
+  popup.document.close();
+}
+async function previewTablePdf(buildDoc){
+  const popup=window.open('','_blank','width=1100,height=850');
+  if(!popup){toast('Allow pop-ups to preview the PDF report');return false;}
+  showPdfPreviewLoading(popup);popup.focus();
+  const blob=await createTablePdfBlob(buildDoc);
+  if(!blob){if(!popup.closed)popup.close();return false;}
+  const url=URL.createObjectURL(blob);
+  popup.location.replace(url);
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  return true;
 }
 function downloadPdfBlob(blob,name){
   if(!blob)return false;
-  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);return true;
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);return true;
+}
+async function downloadTablePdf(buildDoc,name){
+  const blob=await createTablePdfBlob(buildDoc);
+  return blob?downloadPdfBlob(blob,name):false;
 }
 function stockTxtReport(){
   const report=getSelectedReport(),rows=getEmployeeRows(),m=report?.meta||db.reportMeta||{};
@@ -668,12 +709,12 @@ function buildStockPdfDoc(){
       cursorY=(doc.lastAutoTable?.finalY||cursorY)+20;
     }
     return doc;
-  }catch(err){console.warn('jsPDF generation failed; using built-in PDF fallback.',err);return null;}
+  }catch(err){console.error('Stock table PDF generation failed.',err);toast('The stock table PDF could not be generated.');return null;}
 }
 $('#previewStockTxt').addEventListener('click',()=>{const text=stockTxtReport();if(!text)return toast('No records available');openTextPreview(`${companyName(currentUser.companyId)} Stock Report`,text);});
 $('#downloadStockTxt').addEventListener('click',()=>{const text=stockTxtReport();if(!text)return toast('No records available');const report=getSelectedReport();downloadBlob(text,'text/plain;charset=utf-8',`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'stock-report'}.txt`);});
-$('#previewStockPdf').addEventListener('click',()=>{const blob=pdfBlobFromDocOrText(buildStockPdfDoc(),stockTxtReport());if(!blob)return toast('No records available');openPdfPreview(blob);});
-$('#downloadStockPdf').addEventListener('click',()=>{const report=getSelectedReport(),blob=pdfBlobFromDocOrText(buildStockPdfDoc(),stockTxtReport());if(!blob)return toast('No records available');downloadPdfBlob(blob,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'stock-report'}.pdf`);});
+$('#previewStockPdf').addEventListener('click',()=>previewTablePdf(buildStockPdfDoc));
+$('#downloadStockPdf').addEventListener('click',()=>{const report=getSelectedReport();downloadTablePdf(buildStockPdfDoc,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'stock-report'}.pdf`);});
 function downloadBlob(content,type,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
 
 
@@ -816,12 +857,12 @@ function buildAreaPdfDoc(){
       didParseCell:data=>{if(data.section==='body'&&data.row.index===body.length-1)data.cell.styles.fontStyle='bold';}
     });
     return doc;
-  }catch(err){console.warn('jsPDF generation failed; using built-in PDF fallback.',err);return null;}
+  }catch(err){console.error('Area-wise table PDF generation failed.',err);toast('The area-wise table PDF could not be generated.');return null;}
 }
 $('#previewAreaTxt').addEventListener('click',()=>{const text=areaTxtReport();if(!text)return toast('No records available');openTextPreview(`${companyName(currentUser.companyId)} Area Wise Report`,text);});
 $('#downloadAreaTxt').addEventListener('click',()=>{const text=areaTxtReport();if(!text)return toast('No records available');const report=getSelectedAreaReport();downloadBlob(text,'text/plain;charset=utf-8',`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'area-wise-report'}.txt`);});
-$('#previewAreaPdf').addEventListener('click',()=>{const blob=pdfBlobFromDocOrText(buildAreaPdfDoc(),areaTxtReport());if(!blob)return toast('No records available');openPdfPreview(blob);});
-$('#downloadAreaPdf').addEventListener('click',()=>{const report=getSelectedAreaReport(),blob=pdfBlobFromDocOrText(buildAreaPdfDoc(),areaTxtReport());if(!blob)return toast('No records available');downloadPdfBlob(blob,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'area-wise-report'}.pdf`);});
+$('#previewAreaPdf').addEventListener('click',()=>previewTablePdf(buildAreaPdfDoc));
+$('#downloadAreaPdf').addEventListener('click',()=>{const report=getSelectedAreaReport();downloadTablePdf(buildAreaPdfDoc,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'area-wise-report'}.pdf`);});
 
 const OPTIONAL_PRODUCT_FORM_TOKENS=new Set([
   'TAB','CAP','SYP','SUSP','INJ','VIAL','AMP','SACHET','SCT','CRM','OINT','DROP',
@@ -1543,12 +1584,12 @@ function buildPartyPdfDoc(){
       }
     });
     return doc;
-  }catch(err){console.warn('jsPDF generation failed; using built-in PDF fallback.',err);return null;}
+  }catch(err){console.error('Party-wise table PDF generation failed.',err);toast('The party-wise table PDF could not be generated.');return null;}
 }
 $('#previewPartyTxt').addEventListener('click',()=>{const text=partyTxtReport();if(!text)return toast('No records available');openTextPreview(`${companyName(currentUser.companyId)} Party Wise Report`,text);});
 $('#downloadPartyTxt').addEventListener('click',()=>{const text=partyTxtReport();if(!text)return toast('No records available');const report=getSelectedPartyReport();downloadBlob(text,'text/plain;charset=utf-8',`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'party-wise-report'}.txt`);});
-$('#previewPartyPdf').addEventListener('click',()=>{const blob=pdfBlobFromDocOrText(buildPartyPdfDoc(),partyTxtReport());if(!blob)return toast('No records available');openPdfPreview(blob);});
-$('#downloadPartyPdf').addEventListener('click',()=>{const report=getSelectedPartyReport(),blob=pdfBlobFromDocOrText(buildPartyPdfDoc(),partyTxtReport());if(!blob)return toast('No records available');downloadPdfBlob(blob,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'party-wise-report'}.pdf`);});
+$('#previewPartyPdf').addEventListener('click',()=>previewTablePdf(buildPartyPdfDoc));
+$('#downloadPartyPdf').addEventListener('click',()=>{const report=getSelectedPartyReport();downloadTablePdf(buildPartyPdfDoc,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'party-wise-report'}.pdf`);});
 
 function renderPartyWiseAdminImports(){
   const wrap=$('#partyWiseAdminImports');if(!wrap)return;
