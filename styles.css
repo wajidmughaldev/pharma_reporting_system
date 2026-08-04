@@ -189,3 +189,55 @@
 #adminAreaPreviewTableWrap .table-wrap,#adminPartyPreviewTableWrap .table-wrap{max-height:620px;overflow:auto}
 #adminAreaPreviewTableWrap .data-table,#adminPartyPreviewTableWrap .data-table{margin-top:0}
 @media(max-width:700px){.admin-preview-tools{justify-content:flex-start;width:100%}.admin-preview-tools label,.admin-preview-tools select{min-width:100%;width:100%}}
+
+/* V24: Monthly CPR cards with compact icon actions */
+.cpr-month-status-grid{display:grid;grid-template-columns:repeat(3,minmax(250px,1fr));gap:12px}
+.cpr-month-card{border:1px solid var(--border);border-left:4px solid #d0d5dd;background:#fff;padding:14px;min-height:148px;display:flex;flex-direction:column;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease}
+.cpr-month-card.uploaded{border-left-color:var(--success)}
+.cpr-month-card.deactivated{border-left-color:#98a2b3;background:#f8fafc}
+.cpr-month-card.missing{border-left-color:#d89b00;background:#fffcf3}
+.cpr-month-card.selected{border-color:#175cd3;border-left-color:#175cd3;box-shadow:0 0 0 2px rgba(23,92,211,.12)}
+.cpr-month-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cpr-month-card p{margin:10px 0;color:var(--muted);font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.cpr-month-card p b{color:#101828}
+.cpr-month-actions{display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:10px;border-top:1px solid var(--border)}
+.cpr-icon-btn{width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #b8c6da;background:#fff;color:#175cd3;border-radius:7px;cursor:pointer;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}
+.cpr-icon-btn:hover{background:#eff6ff;border-color:#175cd3;transform:translateY(-1px)}
+.cpr-icon-btn:focus-visible{outline:3px solid rgba(23,92,211,.22);outline-offset:2px}
+.cpr-icon-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.cpr-icon-btn.activate{color:#067647;border-color:#86d7b2}.cpr-icon-btn.activate:hover{background:#ecfdf3;border-color:#067647}
+.cpr-icon-btn.danger{color:#d92d20;border-color:#f3aaa4}.cpr-icon-btn.danger:hover{background:#fff1f0;border-color:#d92d20}
+.cpr-filters{grid-template-columns:repeat(5,minmax(150px,1fr))}
+.cpr-source-meta{border:1px solid #b9c0c9;background:#fff;padding:16px;margin-bottom:16px}
+.cpr-meta-title{text-align:center;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:13px;display:flex;flex-direction:column;gap:4px}
+.cpr-meta-title strong{font-size:20px}.cpr-meta-title span{font-size:15px;font-weight:700}
+.cpr-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 24px;font-size:13px}
+.cpr-records-table{min-width:1240px;font-size:12px}
+.cpr-records-table th,.cpr-records-table td{white-space:normal;vertical-align:top;padding:7px 6px}
+.cpr-records-table th:nth-child(1){width:45px}.cpr-records-table th:nth-child(2){width:135px}.cpr-records-table th:nth-child(3){width:110px}.cpr-records-table th:nth-child(4){width:70px}.cpr-records-table th:nth-child(5){min-width:260px}.cpr-records-table th:nth-child(6){width:140px}.cpr-records-table th:nth-child(7),.cpr-records-table th:nth-child(8){width:140px}
+.cpr-taxpayer-cell{text-align:left!important}.cpr-taxpayer-cell strong,.cpr-taxpayer-cell span{display:block}.cpr-taxpayer-cell span{margin-top:4px;color:#475467}.number-cell{text-align:right!important;font-variant-numeric:tabular-nums}
+.cpr-pagination{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:16px;font-size:13px;color:var(--muted)}
+.cpr-pagination .btn:disabled{opacity:.45;cursor:not-allowed}
+.cpr-certificate-controls{grid-template-columns:minmax(180px,260px) minmax(320px,1fr)}
+.cpr-certificate-selection-summary{margin-top:12px;max-width:760px}
+.modal-title-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.modal-title-row h3{margin:0}
+.icon-close{border:0;background:transparent;font-size:30px;line-height:1;cursor:pointer;color:#475467}
+.cpr-certificate-modal-card{width:min(980px,96vw);max-height:94vh;overflow:auto;padding:18px}
+.cpr-certificate-sheet{width:760px;min-height:1060px;margin:0 auto;background:#fff;color:#000;border:1px solid #d0d0d0;padding:78px 54px 70px;font-family:"Times New Roman",Times,serif;position:relative}
+.cpr-letterhead{display:flex;align-items:flex-start;justify-content:center;gap:20px;text-align:center}
+.cpr-te-mark{font-size:58px;font-weight:700;line-height:1;margin-top:-5px;letter-spacing:-7px}
+.cpr-letterhead h2{font-size:25px;letter-spacing:2px;margin:6px 0 10px}.cpr-letterhead h3{font-size:21px;margin:0 0 5px}.cpr-letterhead p{margin:5px 0;font-weight:700;font-style:italic;font-size:15px}.cpr-equals{font-weight:700;letter-spacing:1px}
+.cpr-certificate-title{text-align:center;margin:26px 0 16px}.cpr-certificate-title h3{font-size:18px;font-style:italic;margin:13px 0}.cpr-certificate-title p{font-size:14px;font-weight:700;margin:8px 0}
+.cpr-certificate-table{width:100%;border-collapse:collapse;font-size:13px}.cpr-certificate-table th,.cpr-certificate-table td{border:1px solid #000;padding:5px 7px;text-align:center}.cpr-certificate-table th:first-child{width:48%}.cpr-certificate-table .certificate-total{font-weight:700}
+@media(max-width:1200px){.cpr-month-status-grid{grid-template-columns:repeat(2,minmax(220px,1fr))}.cpr-filters{grid-template-columns:repeat(2,minmax(160px,1fr))}}
+@media(max-width:800px){.cpr-month-status-grid{grid-template-columns:1fr}.cpr-meta-grid{grid-template-columns:1fr}.cpr-certificate-controls{grid-template-columns:1fr}.cpr-certificate-modal-card{padding:10px}.cpr-certificate-sheet{transform-origin:top left;zoom:.72}}
+@media(max-width:560px){.cpr-filters{grid-template-columns:1fr}.cpr-certificate-sheet{zoom:.48}.cpr-pagination{flex-wrap:wrap}}
+
+/* V26: certificate download is rendered from the exact preview sheet */
+.cpr-certificate-capture-host{position:fixed;left:-10000px;top:0;width:760px;background:#fff;pointer-events:none;z-index:-1}
+.cpr-certificate-capture-host .cpr-certificate-sheet{zoom:1!important;transform:none!important;margin:0!important}
+
+/* V26: certificate download uses a dependency-free A4 image PDF fallback */
+
+/* Group Report */
+.group-report-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}.group-report-heading h3{margin-bottom:4px}.group-report-actions{display:flex;gap:10px;flex-wrap:wrap}.group-report-filters{grid-template-columns:repeat(4,minmax(160px,1fr))}.group-report-summary{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin-bottom:16px}.group-report-summary .summary-chip{border:1px solid #dbe4ef;background:#f8fbff;border-radius:8px;padding:11px 13px}.group-report-summary .summary-chip span{display:block;color:#64748b;font-size:12px}.group-report-summary .summary-chip strong{display:block;margin-top:3px;color:#0f172a}.group-report-company{border:1px solid #dbe3ec;border-radius:10px;margin-bottom:16px;overflow:hidden;background:#fff}.group-report-company-title{padding:12px 14px;background:#eff6ff;border-bottom:1px solid #dbe3ec;font-weight:800;color:#0f4da8}.group-ssr-table{margin:12px 14px 6px}.group-item-details{margin:8px 14px 12px;border:1px solid #dbe3ec;border-radius:8px;overflow:hidden}.group-item-details summary{cursor:pointer;list-style:none;padding:10px 12px;background:#f4f8ff;font-weight:700;color:#0757b5}.group-item-details summary::-webkit-details-marker{display:none}.group-item-details[open] summary{border-bottom:1px solid #dbe3ec}.group-item-grid{display:grid;grid-template-columns:1fr 1.25fr;gap:14px;padding:12px}.group-subtitle{font-size:13px;font-weight:800;margin:0 0 8px}.group-mini-table{width:100%;border-collapse:collapse;font-size:12px}.group-mini-table th,.group-mini-table td{border:1px solid #d8e0ea;padding:6px 7px;text-align:right}.group-mini-table th:first-child,.group-mini-table td:first-child{text-align:left}.group-mini-table th{background:#eef5ff}.group-area-table th{background:#edf8ed}.group-empty{padding:30px;text-align:center;color:#64748b}.group-match-note{font-size:12px;color:#64748b;padding:0 14px 12px}@media(max-width:1050px){.group-report-filters{grid-template-columns:repeat(2,minmax(160px,1fr))}.group-item-grid{grid-template-columns:1fr}.group-report-summary{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.group-report-heading{display:block}.group-report-actions{margin-top:12px}.group-report-filters,.group-report-summary{grid-template-columns:1fr}}

@@ -12,6 +12,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
   <div id="toast" class="toast"></div>
@@ -20,6 +21,20 @@
       <h3 id="confirmTitle">Confirm action</h3>
       <p id="confirmMessage"></p>
       <div class="modal-actions"><button id="confirmCancel" class="btn btn-outline" type="button">Cancel</button><button id="confirmAction" class="btn btn-danger" type="button">Confirm</button></div>
+    </div>
+  </div>
+
+
+  <div id="cprCertificateModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-card cpr-certificate-modal-card" role="dialog" aria-modal="true" aria-labelledby="cprCertificateModalTitle">
+      <div class="modal-title-row">
+        <h3 id="cprCertificateModalTitle">CPR Certificate Preview</h3>
+        <button id="closeCprCertificateModal" class="icon-close" type="button" aria-label="Close certificate preview">&times;</button>
+      </div>
+      <div id="cprCertificatePreview"></div>
+      <div class="modal-actions">
+        <button id="downloadCprCertificateFromModal" class="btn btn-primary" type="button">Download Certificate PDF</button>
+      </div>
     </div>
   </div>
 
@@ -78,6 +93,8 @@
         <button class="tab" data-tab="admin-import">Stock &amp; Sales Import</button>
         <button class="tab" data-tab="admin-area-import">Area Wise Import</button>
         <button class="tab" data-tab="admin-party-import">Party Wise Import</button>
+        <button class="tab" data-tab="admin-group-report">Group Report</button>
+        <button class="tab" data-tab="admin-cpr">CPR Reporting</button>
       </div>
 
       <div id="admin-overview" class="tab-panel active">
@@ -209,6 +226,116 @@
             </div>
           </div>
           <div id="adminPartyPreviewTableWrap" class="same-page-stock-preview"></div>
+        </div>
+      </div>
+
+
+      <div id="admin-group-report" class="tab-panel">
+        <div class="panel group-report-panel">
+          <div class="group-report-heading">
+            <div>
+              <h3>Group Report</h3>
+              <p class="muted">Merged report of active SSR, Area Wise and Party Wise records.</p>
+            </div>
+            <div class="group-report-actions">
+              <button id="previewGroupReportPdf" class="btn btn-outline" type="button">Preview PDF</button>
+              <button id="downloadGroupReportPdf" class="btn btn-success" type="button">Download PDF</button>
+            </div>
+          </div>
+          <div class="filters group-report-filters">
+            <label>Report / Date<select id="groupReportDate"><option value="">Latest common date</option></select></label>
+            <label>Company<select id="groupReportCompany"><option value="">All companies</option></select></label>
+            <label>Product Group<select id="groupReportGroup"><option value="">All groups</option></select></label>
+            <label>Item<select id="groupReportItem"><option value="">All items</option></select></label>
+            <label>Area<select id="groupReportArea"><option value="">All areas</option></select></label>
+            <label>Party<select id="groupReportParty"><option value="">All parties</option></select></label>
+            <label>Search<input id="groupReportSearch" placeholder="Search item, area or party"></label>
+          </div>
+          <div class="filter-actions">
+            <button id="resetGroupReportFilters" class="btn btn-outline" type="button">Reset Filters</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div id="groupReportSummary" class="group-report-summary"></div>
+          <div id="groupReportTableWrap"></div>
+        </div>
+      </div>
+
+      <div id="admin-cpr" class="tab-panel">
+        <div class="panel">
+          <h3>Upload Monthly CPR Report</h3>
+          <p class="muted">Upload the original Computerized Payment Receipt (CPR-IT) PDF. The system reads the filing month, CPR information, withholding-agent details, and every taxpayer record exactly from the PDF.</p>
+          <div class="upload-box">
+            <input id="cprPdfFile" type="file" accept=".pdf,application/pdf">
+            <button id="extractCprBtn" class="btn btn-primary" type="button">Extract &amp; Import CPR</button>
+          </div>
+          <p class="format-note">Accepted format: text-based CPR-IT PDF</p>
+          <div id="cprImportProgress" class="progress-text"></div>
+          <div id="cprImportSummary"></div>
+        </div>
+
+        <div class="panel">
+          <div class="stock-preview-heading">
+            <div>
+              <h3>Monthly Upload Status</h3>
+              <p class="muted">Track which Pakistani filing months have been uploaded and which are still pending.</p>
+            </div>
+            <div class="admin-preview-tools">
+              <label>Fiscal Year<select id="cprStatusFiscalYear"></select></label>
+            </div>
+          </div>
+          <div id="cprMonthStatus" class="cpr-month-status-grid"></div>
+        </div>
+
+        <div class="panel cpr-records-panel">
+          <div class="stock-preview-heading">
+            <div>
+              <h3>CPR Records Preview</h3>
+              <p class="muted">Report: <strong id="cprPreviewReportName">No report selected</strong></p>
+            </div>
+            <div class="admin-preview-tools">
+              <label>Report<select id="cprPreviewReport"></select></label>
+              <div id="cprPreviewStats" class="stock-preview-stats"></div>
+            </div>
+          </div>
+          <div id="cprReportMeta" class="cpr-source-meta"></div>
+          <div class="filters cpr-filters">
+            <label>Sr.<input id="cprFilterSr" type="number" min="1" placeholder="Serial no."></label>
+            <label>NTN / CNIC<input id="cprFilterNtn" placeholder="NTN or CNIC"></label>
+            <label>Tax Office<select id="cprFilterTaxOffice"><option value="">All tax offices</option></select></label>
+            <label>Status<select id="cprFilterStatus"><option value="">All statuses</option></select></label>
+            <label>Taxpayer / Business &amp; Address<input id="cprFilterTaxpayer" placeholder="Name or address"></label>
+            <label>Payment Section / NAM<select id="cprFilterPayment"><option value="">All sections</option></select></label>
+            <label>Minimum Withheld Amount<input id="cprFilterAmountMin" type="number" min="0"></label>
+            <label>Maximum Withheld Amount<input id="cprFilterAmountMax" type="number" min="0"></label>
+            <label>Minimum Tax Amount<input id="cprFilterTaxMin" type="number" min="0"></label>
+            <label>Maximum Tax Amount<input id="cprFilterTaxMax" type="number" min="0"></label>
+          </div>
+          <div class="filter-actions">
+            <button id="resetCprFilters" class="btn btn-outline" type="button">Reset Filters</button>
+            <button id="previewCprPdf" class="btn btn-outline" type="button">Preview PDF</button>
+            <button id="downloadCprPdf" class="btn btn-primary" type="button">Download PDF</button>
+          </div>
+          <div id="cprRecordsTableWrap" class="same-page-stock-preview"></div>
+          <div id="cprPagination" class="cpr-pagination"></div>
+        </div>
+
+        <div class="panel">
+          <div class="stock-preview-heading">
+            <div>
+              <h3>Generate CPR Certificate</h3>
+              <p class="muted">Generate the July-to-June purchase and withholding-tax deduction certificate from the uploaded monthly CPR records.</p>
+            </div>
+          </div>
+          <div class="filters cpr-certificate-controls">
+            <label>Fiscal Year<select id="cprCertificateFiscalYear"></select></label>
+            <label>Taxpayer / Business<select id="cprCertificateTaxpayer"><option value="">Select taxpayer</option></select></label>
+          </div>
+          <div class="filter-actions">
+            <button id="previewCprCertificate" class="btn btn-outline" type="button">Preview Certificate</button>
+            <button id="downloadCprCertificate" class="btn btn-primary" type="button">Download Certificate PDF</button>
+          </div>
+          <div id="cprCertificateSelectionSummary" class="cpr-certificate-selection-summary"></div>
         </div>
       </div>
 
@@ -351,7 +478,7 @@
     </section>
   </main>
 
-  <footer>Localhost prototype • Data is stored in your browser LocalStorage</footer>
-  <script src="app.js?v=employee-table-pdf-fix-1" type="module"></script>
+  <footer>Localhost prototype • Report data is stored in browser LocalStorage and original CPR PDFs in IndexedDB</footer>
+  <script src="app.js" type="module"></script>
 </body>
 </html>

@@ -11,6 +11,9 @@ const seedData={
   areaWiseImports:[],
   partyWiseRows:[],
   partyWiseImports:[],
+  cprRows:[],
+  cprImports:[],
+  cprCertificates:[],
   reportMeta:{distributor:'ARBY ENTERPRISES, HYDERABAD',from:'01/07/2025',to:'27/07/2026',printedOn:'27/07/2026'}
 };
 let db=await loadDB(); let currentUser=null; let selectedReportId=null; let selectedAreaReportId=null; let selectedPartyReportId=null; let selectedAdminStockPreviewId=null; let selectedAdminAreaPreviewId=null; let selectedAdminPartyPreviewId=null; let employeeReportMode='stock';
@@ -32,8 +35,8 @@ async function loadDB(){
     let raw=localStorage.getItem(DB_KEY);
     if(raw?.startsWith('gz:'))raw=await decompressStoredText(raw.slice(3));
     const loaded=JSON.parse(raw)||structuredClone(seedData);
-    loaded.imports=loaded.imports||[]; loaded.stock=loaded.stock||[]; loaded.areaWiseImports=loaded.areaWiseImports||[]; loaded.areaWiseRows=loaded.areaWiseRows||[]; loaded.partyWiseImports=loaded.partyWiseImports||[]; loaded.partyWiseRows=loaded.partyWiseRows||[]; loaded.companies=loaded.companies||[]; loaded.users=loaded.users||[]; loaded.companies.forEach(c=>{if(typeof c.active!=='boolean')c.active=true;});
-    [loaded.imports,loaded.areaWiseImports,loaded.partyWiseImports].forEach(list=>list.forEach(report=>{if(typeof report.active!=='boolean')report.active=true;}));
+    loaded.imports=loaded.imports||[]; loaded.stock=loaded.stock||[]; loaded.areaWiseImports=loaded.areaWiseImports||[]; loaded.areaWiseRows=loaded.areaWiseRows||[]; loaded.partyWiseImports=loaded.partyWiseImports||[]; loaded.partyWiseRows=loaded.partyWiseRows||[]; loaded.cprImports=loaded.cprImports||[]; loaded.cprRows=loaded.cprRows||[]; loaded.cprCertificates=loaded.cprCertificates||[]; loaded.companies=loaded.companies||[]; loaded.users=loaded.users||[]; loaded.companies.forEach(c=>{if(typeof c.active!=='boolean')c.active=true;});
+    [loaded.imports,loaded.areaWiseImports,loaded.partyWiseImports,loaded.cprImports].forEach(list=>list.forEach(report=>{if(typeof report.active!=='boolean')report.active=true;}));
     // Migrate data created by older prototype versions into a dated report.
     if(loaded.stock.length && !loaded.imports.length){
       loaded.imports.push({id:uid(),filename:'Imported stock report',date:new Date().toISOString(),reportDate:toIsoDate(loaded.reportMeta?.printedOn)||new Date().toISOString().slice(0,10),meta:loaded.reportMeta||seedData.reportMeta,groups:0,rows:loaded.stock.length});
@@ -45,6 +48,7 @@ async function loadDB(){
     removeDuplicateReportCopies(loaded,'imports','stock');
     removeDuplicateReportCopies(loaded,'areaWiseImports','areaWiseRows');
     removeDuplicateReportCopies(loaded,'partyWiseImports','partyWiseRows');
+    removeDuplicateReportCopies(loaded,'cprImports','cprRows');
     return loaded;
   }catch{return structuredClone(seedData)}
 }
@@ -199,7 +203,7 @@ $('#logoutBtn').addEventListener('click',()=>{currentUser=null;$('#privateNav').
 function renderCompanySelect(){const s=$('#signupCompany');s.innerHTML='<option value="">Select company</option>'+db.companies.filter(c=>c.active!==false).sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');}
 $('#signupForm').addEventListener('submit',e=>{e.preventDefault();const email=$('#signupEmail').value.trim().toLowerCase();if(db.users.some(u=>u.email.toLowerCase()===email))return toast('Email already exists');db.users.push({id:uid(),name:$('#signupName').value.trim(),email,password:$('#signupPassword').value,role:'employee',companyId:$('#signupCompany').value,approved:false,active:false});saveDB();e.target.reset();toast('Account created. Waiting for Super Admin approval.');showView('login');});
 
-$$('.tab').forEach(tab=>tab.addEventListener('click',()=>{$$('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$$('.tab-panel').forEach(p=>p.classList.remove('active'));$('#'+tab.dataset.tab).classList.add('active');if(tab.dataset.tab==='admin-import'){refreshAdminPreviewSelectors();refreshAdminImportStockFilterOptions();renderAdminImportStockPreview();renderStockAdminImports();requestAnimationFrame(initTopScrollbars);}if(tab.dataset.tab==='admin-area-import'){refreshAdminPreviewSelectors();renderAreaWiseAdminImports();renderAdminAreaPreview();requestAnimationFrame(initTopScrollbars);}if(tab.dataset.tab==='admin-party-import'){refreshAdminPreviewSelectors();renderPartyWiseAdminImports();renderAdminPartyPreview();requestAnimationFrame(initTopScrollbars);}}));
+$$('.tab').forEach(tab=>tab.addEventListener('click',()=>{$$('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');$$('.tab-panel').forEach(p=>p.classList.remove('active'));$('#'+tab.dataset.tab).classList.add('active');if(tab.dataset.tab==='admin-import'){refreshAdminPreviewSelectors();refreshAdminImportStockFilterOptions();renderAdminImportStockPreview();renderStockAdminImports();requestAnimationFrame(initTopScrollbars);}if(tab.dataset.tab==='admin-area-import'){refreshAdminPreviewSelectors();renderAreaWiseAdminImports();renderAdminAreaPreview();requestAnimationFrame(initTopScrollbars);}if(tab.dataset.tab==='admin-party-import'){refreshAdminPreviewSelectors();renderPartyWiseAdminImports();renderAdminPartyPreview();requestAnimationFrame(initTopScrollbars);}if(tab.dataset.tab==='admin-group-report'){bindGroupReport();renderGroupReport();requestAnimationFrame(initTopScrollbars);}if(tab.dataset.tab==='admin-cpr'){renderCprAdmin();requestAnimationFrame(initTopScrollbars);}}));
 
 $('#companyForm').addEventListener('submit',e=>{e.preventDefault();const name=$('#companyName').value.trim().toUpperCase();if(!name)return;if(db.companies.some(c=>c.name===name))return toast('Company already exists');db.companies.push({id:uid(),name,active:true});saveDB();e.target.reset();renderAdmin();toast('Company added');});
 
@@ -231,6 +235,8 @@ function renderAdmin(){
   renderAdminAreaPreview();
   renderPartyWiseAdminImports();
   renderAdminPartyPreview();
+  if(typeof bindGroupReport==='function'){bindGroupReport();renderGroupReport();}
+  if(typeof renderCprAdmin==='function')renderCprAdmin();
   requestAnimationFrame(initTopScrollbars);
 }
 
@@ -525,107 +531,66 @@ function openTextPreview(title,text){
   popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{margin:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif}.toolbar{position:sticky;top:0;background:#fff;border-bottom:1px solid #d1d5db;padding:12px 18px;font-weight:700}.content{padding:20px}.sheet{max-width:1100px;margin:auto;background:#fff;border:1px solid #d1d5db;padding:22px;white-space:pre;overflow:auto;font:13px/1.5 "Courier New",monospace}</style></head><body><div class="toolbar">TXT Preview — ${escapeHtml(title)}</div><div class="content"><pre class="sheet">${escapeHtml(text)}</pre></div></body></html>`);
   popup.document.close();popup.focus();
 }
-const PDF_TABLE_LIBRARY_SOURCES={
-  jsPDF:[
-    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js',
-    'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js'
-  ],
-  autoTable:[
-    'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js',
-    'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js'
-  ]
-};
-let pdfTableLibrariesPromise=null;
-function hasJsPdfLibrary(){return typeof window.jspdf?.jsPDF==='function';}
-function hasJsPdfAutoTable(){
-  const jsPDF=window.jspdf?.jsPDF;
-  if(typeof jsPDF!=='function')return false;
-  if(typeof jsPDF.API?.autoTable==='function')return true;
-  try{return typeof new jsPDF().autoTable==='function';}catch{return false;}
+function asciiPdfText(value){
+  return String(value??'').replace(/\t/g,'    ').replace(/[\u0000-\u001F\u007F-\uFFFF]/g,ch=>ch==='\n'?'\n':'?');
 }
-function appendPdfLibraryScript(src){
-  return new Promise((resolve,reject)=>{
-    const script=document.createElement('script');
-    script.src=src;script.async=true;script.dataset.pdfTableLibrary='true';
-    script.onload=()=>resolve(src);
-    script.onerror=()=>{script.remove();reject(new Error(`Unable to load ${src}`));};
-    document.head.appendChild(script);
-  });
+function escapePdfLiteral(value){return asciiPdfText(value).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');}
+function wrapPdfTextLine(line,maxChars=105){
+  const value=asciiPdfText(line);
+  if(value.length<=maxChars)return[value];
+  const parts=[];let rest=value;
+  while(rest.length>maxChars){let cut=rest.lastIndexOf(' ',maxChars);if(cut<Math.floor(maxChars*.6))cut=maxChars;parts.push(rest.slice(0,cut));rest=rest.slice(cut).trimStart();}
+  parts.push(rest);return parts;
 }
-async function loadPdfLibraryFromSources(sources,readyCheck,label){
-  if(readyCheck())return;
-  let lastError=null;
-  for(const src of sources){
-    try{
-      await appendPdfLibraryScript(src);
-      if(readyCheck())return;
-      lastError=new Error(`${label} loaded but did not initialize correctly.`);
-    }catch(err){lastError=err;}
+function buildSimpleTextPdfBlob(text){
+  const logicalLines=String(text||'').split(/\r?\n/).map(asciiPdfText);
+  const longest=Math.max(1,...logicalLines.map(line=>line.length));
+  // A3 portrait is used for very wide source reports; everything remains portrait.
+  const useA3=longest>120,pageWidth=useA3?842:595,pageHeight=useA3?1191:842;
+  const usableWidth=pageWidth-56;
+  const fontSize=Math.max(3.0,Math.min(6.2,usableWidth/(longest*.6)));
+  const leading=fontSize+2.2;
+  const linesPerPage=Math.max(20,Math.floor((pageHeight-54)/leading));
+  const pages=[];
+  for(let i=0;i<logicalLines.length;i+=linesPerPage)pages.push(logicalLines.slice(i,i+linesPerPage));
+  if(!pages.length)pages.push(['']);
+  const pageCount=pages.length,fontId=3+(pageCount*2),maxId=fontId,objects=new Array(maxId+1);
+  objects[1]='<< /Type /Catalog /Pages 2 0 R >>';
+  const kids=[];
+  for(let i=0;i<pageCount;i++)kids.push(`${3+i*2} 0 R`);
+  objects[2]=`<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pageCount} >>`;
+  for(let i=0;i<pageCount;i++){
+    const pageId=3+i*2,contentId=4+i*2;
+    objects[pageId]=`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`;
+    const commands=['BT',`/F1 ${fontSize.toFixed(2)} Tf`,`28 ${pageHeight-26} Td`,`${leading.toFixed(2)} TL`];
+    pages[i].forEach(line=>{commands.push(`(${escapePdfLiteral(line)}) Tj`,'T*');});
+    commands.push('ET');
+    const stream=commands.join('\n');
+    objects[contentId]=`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
   }
-  throw lastError||new Error(`${label} could not be loaded.`);
+  objects[fontId]='<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>';
+  let pdf='%PDF-1.4\n%Tawakal Enterprises\n',offsets=new Array(maxId+1).fill(0);
+  for(let id=1;id<=maxId;id++){offsets[id]=pdf.length;pdf+=`${id} 0 obj\n${objects[id]}\nendobj\n`;}
+  const xrefOffset=pdf.length;
+  pdf+=`xref\n0 ${maxId+1}\n0000000000 65535 f \n`;
+  for(let id=1;id<=maxId;id++)pdf+=`${String(offsets[id]).padStart(10,'0')} 00000 n \n`;
+  pdf+=`trailer\n<< /Size ${maxId+1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return new Blob([pdf],{type:'application/pdf'});
 }
-async function ensurePdfTableLibraries(){
-  if(hasJsPdfLibrary()&&hasJsPdfAutoTable())return true;
-  if(!pdfTableLibrariesPromise){
-    pdfTableLibrariesPromise=(async()=>{
-      await loadPdfLibraryFromSources(PDF_TABLE_LIBRARY_SOURCES.jsPDF,hasJsPdfLibrary,'jsPDF');
-      await loadPdfLibraryFromSources(PDF_TABLE_LIBRARY_SOURCES.autoTable,hasJsPdfAutoTable,'jsPDF AutoTable');
-      if(!hasJsPdfLibrary()||!hasJsPdfAutoTable())throw new Error('The PDF table libraries are unavailable.');
-      return true;
-    })().catch(err=>{pdfTableLibrariesPromise=null;throw err;});
-  }
-  try{return await pdfTableLibrariesPromise;}
-  catch(err){
-    console.error('PDF table libraries failed to load.',err);
-    toast('PDF table tools could not be loaded. Check your internet connection and refresh the page.');
-    return false;
-  }
+function pdfBlobFromDocOrText(doc,text){
+  if(doc){try{return doc.output('blob');}catch(err){console.warn('jsPDF blob output failed; using built-in PDF fallback.',err);}}
+  if(!text)return null;
+  return buildSimpleTextPdfBlob(text);
 }
-function pdfBlobFromTableDoc(doc){
-  if(!doc||typeof doc.output!=='function')return null;
-  try{
-    const blob=doc.output('blob');
-    if(!(blob instanceof Blob)||blob.size===0)throw new Error('The generated PDF is empty.');
-    return blob;
-  }catch(err){
-    console.error('Table PDF blob generation failed.',err);
-    toast('The table PDF could not be generated. Please try again.');
-    return null;
-  }
-}
-async function createTablePdfBlob(buildDoc){
-  if(!(await ensurePdfTableLibraries()))return null;
-  try{return pdfBlobFromTableDoc(buildDoc());}
-  catch(err){
-    console.error('Table PDF generation failed.',err);
-    toast('The table PDF could not be generated. Please try again.');
-    return null;
-  }
-}
-function showPdfPreviewLoading(popup){
-  popup.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Preparing PDF</title><style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827}.card{background:#fff;border:1px solid #d1d5db;border-radius:10px;padding:22px 28px;box-shadow:0 8px 24px rgba(0,0,0,.08);font-weight:700}</style></head><body><div class="card">Preparing table PDF...</div></body></html>');
-  popup.document.close();
-}
-async function previewTablePdf(buildDoc){
-  const popup=window.open('','_blank','width=1100,height=850');
-  if(!popup){toast('Allow pop-ups to preview the PDF report');return false;}
-  showPdfPreviewLoading(popup);popup.focus();
-  const blob=await createTablePdfBlob(buildDoc);
-  if(!blob){if(!popup.closed)popup.close();return false;}
-  const url=URL.createObjectURL(blob);
-  popup.location.replace(url);
-  setTimeout(()=>URL.revokeObjectURL(url),60000);
-  return true;
+function openPdfPreview(blob){
+  if(!blob)return false;
+  const url=URL.createObjectURL(blob),popup=window.open(url,'_blank');
+  if(!popup){URL.revokeObjectURL(url);toast('Allow pop-ups to preview the PDF report');return false;}
+  popup.focus();setTimeout(()=>URL.revokeObjectURL(url),60000);return true;
 }
 function downloadPdfBlob(blob,name){
   if(!blob)return false;
-  const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),1500);return true;
-}
-async function downloadTablePdf(buildDoc,name){
-  const blob=await createTablePdfBlob(buildDoc);
-  return blob?downloadPdfBlob(blob,name):false;
+  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);return true;
 }
 function stockTxtReport(){
   const report=getSelectedReport(),rows=getEmployeeRows(),m=report?.meta||db.reportMeta||{};
@@ -709,12 +674,12 @@ function buildStockPdfDoc(){
       cursorY=(doc.lastAutoTable?.finalY||cursorY)+20;
     }
     return doc;
-  }catch(err){console.error('Stock table PDF generation failed.',err);toast('The stock table PDF could not be generated.');return null;}
+  }catch(err){console.warn('jsPDF generation failed; using built-in PDF fallback.',err);return null;}
 }
 $('#previewStockTxt').addEventListener('click',()=>{const text=stockTxtReport();if(!text)return toast('No records available');openTextPreview(`${companyName(currentUser.companyId)} Stock Report`,text);});
 $('#downloadStockTxt').addEventListener('click',()=>{const text=stockTxtReport();if(!text)return toast('No records available');const report=getSelectedReport();downloadBlob(text,'text/plain;charset=utf-8',`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'stock-report'}.txt`);});
-$('#previewStockPdf').addEventListener('click',()=>previewTablePdf(buildStockPdfDoc));
-$('#downloadStockPdf').addEventListener('click',()=>{const report=getSelectedReport();downloadTablePdf(buildStockPdfDoc,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'stock-report'}.pdf`);});
+$('#previewStockPdf').addEventListener('click',()=>{const blob=pdfBlobFromDocOrText(buildStockPdfDoc(),stockTxtReport());if(!blob)return toast('No records available');openPdfPreview(blob);});
+$('#downloadStockPdf').addEventListener('click',()=>{const report=getSelectedReport(),blob=pdfBlobFromDocOrText(buildStockPdfDoc(),stockTxtReport());if(!blob)return toast('No records available');downloadPdfBlob(blob,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'stock-report'}.pdf`);});
 function downloadBlob(content,type,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
 
 
@@ -857,12 +822,12 @@ function buildAreaPdfDoc(){
       didParseCell:data=>{if(data.section==='body'&&data.row.index===body.length-1)data.cell.styles.fontStyle='bold';}
     });
     return doc;
-  }catch(err){console.error('Area-wise table PDF generation failed.',err);toast('The area-wise table PDF could not be generated.');return null;}
+  }catch(err){console.warn('jsPDF generation failed; using built-in PDF fallback.',err);return null;}
 }
 $('#previewAreaTxt').addEventListener('click',()=>{const text=areaTxtReport();if(!text)return toast('No records available');openTextPreview(`${companyName(currentUser.companyId)} Area Wise Report`,text);});
 $('#downloadAreaTxt').addEventListener('click',()=>{const text=areaTxtReport();if(!text)return toast('No records available');const report=getSelectedAreaReport();downloadBlob(text,'text/plain;charset=utf-8',`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'area-wise-report'}.txt`);});
-$('#previewAreaPdf').addEventListener('click',()=>previewTablePdf(buildAreaPdfDoc));
-$('#downloadAreaPdf').addEventListener('click',()=>{const report=getSelectedAreaReport();downloadTablePdf(buildAreaPdfDoc,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'area-wise-report'}.pdf`);});
+$('#previewAreaPdf').addEventListener('click',()=>{const blob=pdfBlobFromDocOrText(buildAreaPdfDoc(),areaTxtReport());if(!blob)return toast('No records available');openPdfPreview(blob);});
+$('#downloadAreaPdf').addEventListener('click',()=>{const report=getSelectedAreaReport(),blob=pdfBlobFromDocOrText(buildAreaPdfDoc(),areaTxtReport());if(!blob)return toast('No records available');downloadPdfBlob(blob,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'area-wise-report'}.pdf`);});
 
 const OPTIONAL_PRODUCT_FORM_TOKENS=new Set([
   'TAB','CAP','SYP','SUSP','INJ','VIAL','AMP','SACHET','SCT','CRM','OINT','DROP',
@@ -1584,12 +1549,12 @@ function buildPartyPdfDoc(){
       }
     });
     return doc;
-  }catch(err){console.error('Party-wise table PDF generation failed.',err);toast('The party-wise table PDF could not be generated.');return null;}
+  }catch(err){console.warn('jsPDF generation failed; using built-in PDF fallback.',err);return null;}
 }
 $('#previewPartyTxt').addEventListener('click',()=>{const text=partyTxtReport();if(!text)return toast('No records available');openTextPreview(`${companyName(currentUser.companyId)} Party Wise Report`,text);});
 $('#downloadPartyTxt').addEventListener('click',()=>{const text=partyTxtReport();if(!text)return toast('No records available');const report=getSelectedPartyReport();downloadBlob(text,'text/plain;charset=utf-8',`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'party-wise-report'}.txt`);});
-$('#previewPartyPdf').addEventListener('click',()=>previewTablePdf(buildPartyPdfDoc));
-$('#downloadPartyPdf').addEventListener('click',()=>{const report=getSelectedPartyReport();downloadTablePdf(buildPartyPdfDoc,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'party-wise-report'}.pdf`);});
+$('#previewPartyPdf').addEventListener('click',()=>{const blob=pdfBlobFromDocOrText(buildPartyPdfDoc(),partyTxtReport());if(!blob)return toast('No records available');openPdfPreview(blob);});
+$('#downloadPartyPdf').addEventListener('click',()=>{const report=getSelectedPartyReport(),blob=pdfBlobFromDocOrText(buildPartyPdfDoc(),partyTxtReport());if(!blob)return toast('No records available');downloadPdfBlob(blob,`${safeReportFileName(companyName(currentUser.companyId))}-${report?.reportDate||'party-wise-report'}.pdf`);});
 
 function renderPartyWiseAdminImports(){
   const wrap=$('#partyWiseAdminImports');if(!wrap)return;
@@ -2019,4 +1984,577 @@ function importPdfPages(pages,filename){
   return{companiesAdded,rowsAdded,groupsDetected};
 }
 
+
+/* V24: CPR month cards now contain compact icon actions; separate extracted-file list removed */
+const CPR_FILE_DB='tawakal_cpr_files_v1';
+const CPR_FILE_STORE='files';
+const CPR_PAGE_SIZE=100;
+let selectedCprPreviewId=null;
+let cprPreviewPage=1;
+let currentCprCertificateData=null;
+
+function openCprFileDb(){
+  return new Promise((resolve,reject)=>{
+    if(!('indexedDB' in window))return reject(new Error('IndexedDB is not available in this browser'));
+    const request=indexedDB.open(CPR_FILE_DB,1);
+    request.onupgradeneeded=()=>{const idb=request.result;if(!idb.objectStoreNames.contains(CPR_FILE_STORE))idb.createObjectStore(CPR_FILE_STORE);};
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error||new Error('Could not open CPR file storage'));
+  });
+}
+async function storeCprOriginalFile(reportId,file){
+  try{
+    const idb=await openCprFileDb();
+    await new Promise((resolve,reject)=>{const tx=idb.transaction(CPR_FILE_STORE,'readwrite');tx.objectStore(CPR_FILE_STORE).put(file,reportId);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
+    idb.close();return true;
+  }catch(err){console.warn('Original CPR PDF could not be stored.',err);return false;}
+}
+async function getCprOriginalFile(reportId){
+  try{
+    const idb=await openCprFileDb();
+    const result=await new Promise((resolve,reject)=>{const tx=idb.transaction(CPR_FILE_STORE,'readonly'),req=tx.objectStore(CPR_FILE_STORE).get(reportId);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error);});
+    idb.close();return result;
+  }catch(err){console.warn(err);return null;}
+}
+async function deleteCprOriginalFile(reportId){
+  try{
+    const idb=await openCprFileDb();
+    await new Promise((resolve,reject)=>{const tx=idb.transaction(CPR_FILE_STORE,'readwrite');tx.objectStore(CPR_FILE_STORE).delete(reportId);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
+    idb.close();
+  }catch(err){console.warn(err);}
+}
+function cprMonthYearParts(value){
+  const m=String(value||'').match(/^(\d{1,2})\/(\d{4})$/);return m?{month:Number(m[1]),year:Number(m[2])}:null;
+}
+function cprFiscalYearForMonth(month,year){return month>=7?`${year}-${year+1}`:`${year-1}-${year}`;}
+function cprCurrentFiscalYear(){const d=new Date(),y=d.getFullYear(),m=d.getMonth()+1;return cprFiscalYearForMonth(m,y);}
+function cprFiscalMonths(fiscalYear){
+  const start=Number(String(fiscalYear||'').split('-')[0]);
+  if(!Number.isFinite(start))return[];
+  return[7,8,9,10,11,12,1,2,3,4,5,6].map(month=>({month,year:month>=7?start:start+1,key:`${String(month).padStart(2,'0')}/${month>=7?start:start+1}`,label:new Date(month>=7?start:start+1,month-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}).replace(' ','-')}));
+}
+function cprFiscalYears(){
+  const years=new Set((db.cprImports||[]).map(r=>r.fiscalYear).filter(Boolean));years.add(cprCurrentFiscalYear());
+  return[...years].sort((a,b)=>b.localeCompare(a));
+}
+function cprCleanJoinedText(value){
+  let text=String(value||'').replace(/\s+/g,' ').trim();
+  for(let i=0;i<3;i++)text=text.replace(/\b([A-Z]{4,})\s+([A-Z])\b/g,'$1$2');
+  return text.replace(/\s+([,.)])/g,'$1').replace(/([(/])\s+/g,'$1').trim();
+}
+function cprBandLines(tokens,minX,maxX){
+  const picked=tokens.filter(t=>t.x>=minX&&t.x<maxX).sort((a,b)=>a.order-b.order||a.x-b.x),lines=[];
+  for(const token of picked){let line=lines.findLast?.(l=>l.page===token.page&&Math.abs(l.top-token.top)<=2.2);if(!line){line={page:token.page,top:token.top,order:token.order,items:[]};lines.push(line);}line.items.push(token);}
+  return lines.sort((a,b)=>a.order-b.order).map(line=>cprCleanJoinedText(line.items.sort((a,b)=>a.x-b.x).map(t=>t.text).join(' '))).filter(Boolean);
+}
+function cprBandText(tokens,minX,maxX){return cprCleanJoinedText(cprBandLines(tokens,minX,maxX).join(' '));}
+function cprNumeric(value){const n=Number(String(value||'').replace(/,/g,''));return Number.isFinite(n)?n:0;}
+function cprFirstNumeric(tokens,minX,maxX){
+  const token=tokens.find(t=>t.x>=minX&&t.x<maxX&&/^-?\d[\d,]*(?:\.\d+)?$/.test(t.text));return token?cprNumeric(token.text):0;
+}
+function parseCprMetaFromPages(pages,filename){
+  const firstLines=pageLines(pages[0]||{height:0,items:[]}).map(line=>line.text),text=pages.map(page=>pageLines(page).map(line=>line.text).join(' ')).join(' ').replace(/\s+/g,' ');
+  const take=(regex,fallback='')=>(text.match(regex)||[])[1]?.trim()||fallback;
+  const lineStarting=label=>firstLines.find(line=>new RegExp(`^${label}`,'i').test(line))||'';
+  const cprNo=(lineStarting('CPR\\s*No').match(/IT-[0-9-]+/i)||[])[0]||take(/CPR\s*No\s*:?\s*(IT-[0-9-]+)/i);
+  const paymentDate=(lineStarting('Payment\\s*Date').match(/\d{1,2}-[A-Za-z]{3}-\d{4}/)||[])[0]||take(/Payment\s*Date\s*:?\s*(\d{1,2}-[A-Za-z]{3}-\d{4})/i);
+  const monthYear=(lineStarting('Month\\s*\\/\\s*Year').match(/\d{1,2}\/\d{4}/)||[])[0]||take(/Month\s*\/\s*Year\s*:?\s*(\d{1,2}\/\d{4})/i);
+  const parts=cprMonthYearParts(monthYear);
+  const taxYear=(lineStarting('Nature\\s*of\\s*Payment').match(/Tax\s*Year\s*:?\s*(\d{4})/i)||[])[1]||take(/Tax\s*Year\s*:?\s*(\d{4})/i);
+  const paymentLine=lineStarting('Payment\\s*Section'),paymentContinuation=firstLines.find(line=>/^ATL\s*@/i.test(line))||'';
+  const paymentSection=cprCleanJoinedText(`${paymentLine.replace(/^Payment\s*Section\s*:?\s*/i,'').replace(/\s+RTO\s*\/\s*LTO\s*:.*$/i,'')} ${paymentContinuation}`);
+  const rtoLto=cprCleanJoinedText((paymentLine.match(/RTO\s*\/\s*LTO\s*:?\s*(.+)$/i)||[])[1]||'');
+  const natureLine=lineStarting('Nature\\s*of\\s*Payment'),nature=cprCleanJoinedText(natureLine.replace(/^Nature\s*of\s*Payment\s*:?\s*/i,'').replace(/\s+Tax\s*Year\s*:.*$/i,''));
+  const accountHead=(lineStarting('Account\\s*Head').match(/:\s*([A-Z0-9]+)\s*$/i)||[])[1]||take(/Account\s*Head\s*\(\s*NAM\s*\)\s*:?\s*([A-Z0-9]+)/i);
+  const registrationNo=(lineStarting('Registration').match(/:\s*([0-9-]+)\s*$/)||[])[1]||take(/Registration\s*\/\s*Inc\s*No\.?\s*:?\s*([0-9-]+)/i);
+  const nameIndex=firstLines.findIndex(line=>/^Name\s*:/i.test(line)),agentParts=[];
+  if(nameIndex>=0){agentParts.push(firstLines[nameIndex].replace(/^Name\s*:?\s*/i,''));for(let i=nameIndex+1;i<firstLines.length&&!/^No\.\s*of\s*Tax\s*Payers/i.test(firstLines[i]);i++)agentParts.push(firstLines[i]);}
+  const agentName=cprCleanJoinedText(agentParts.join(' ')||take(/Name\s*:?\s*(.*?)(?=No\.\s*of\s*Tax\s*Payers|Details\s*of\s*Tax\s*Payers)/i));
+  const expectedTaxpayers=Number((lineStarting('No\\.\\s*of\\s*Tax\\s*Payers').match(/(\d+)\s*$/)||[])[1]||take(/No\.\s*of\s*Tax\s*Payers\s*:?\s*(\d+)/i,'0'))||0;
+  const documentId=take(/Document\s*ID\s*:?\s*([0-9]+)/i),generationDate=take(/Generation\s*Date\s*:?\s*(\d{1,2}-[A-Za-z]{3}-\d{4}\s+\d{1,2}:\d{2}\s*[AP]M)/i),user=take(/User\s*:?\s*([A-Z0-9]+)/i);
+  return{filename,cprNo,paymentDate,monthYear,month:parts?.month||0,year:parts?.year||0,fiscalYear:parts?cprFiscalYearForMonth(parts.month,parts.year):'',taxYear,rtoLto,nature,accountHead,registrationNo,agentName,expectedTaxpayers,paymentSection,documentId,generationDate,user};
+}
+function parseCprRecordsFromPages(pages){
+  const tokens=[];
+  pages.forEach((page,pageIndex)=>{
+    const pageHeight=Number(page.height||842);
+    (page.items||[]).forEach((item,itemIndex)=>{
+      const text=String(item.str??item.text??'').replace(/\s+/g,' ').trim();if(!text)return;
+      const x=Number(item.x??item.transform?.[4]??0),y=Number(item.y??item.transform?.[5]??0),top=pageHeight-y;
+      if(top>pageHeight-72)return;
+      tokens.push({text,x,top,page:pageIndex,order:(pageIndex*100000)+(top*100)+x+(itemIndex/10000)});
+    });
+  });
+  tokens.sort((a,b)=>a.order-b.order);
+  const starts=[];
+  tokens.forEach((token,index)=>{if(token.x>=25&&token.x<52&&/^\d{1,5}$/.test(token.text))starts.push({index,sr:Number(token.text)});});
+  const rows=[];
+  for(let i=0;i<starts.length;i++){
+    const start=starts[i],end=starts[i+1]?.index??tokens.length,rawBlock=tokens.slice(start.index,end);
+    const cnicToken=rawBlock.find(t=>t.x>=50&&t.x<132&&/^\d{5}-\d{7}-\d$/.test(t.text));
+    const cnicOrder=cnicToken?.order??Infinity,block=cnicToken?rawBlock.filter(t=>t.page<cnicToken.page||(t.page===cnicToken.page&&t.top<=cnicToken.top+2.2)):rawBlock;
+    const nameBand=block.filter(t=>t.x>=218&&t.x<350);
+    const nameTokens=nameBand.filter(t=>t.order<cnicOrder-1.5),addressTokens=nameBand.filter(t=>t.order>=cnicOrder-1.5);
+    const ntnCnic=cnicToken?.text||cprBandText(block,50,132).match(/\d{5}-\d{7}-\d/)?.[0]||'';
+    const taxpayerName=cprCleanJoinedText(cprBandLines(nameTokens,218,350).join(' '));
+    const address=cprCleanJoinedText(cprBandLines(addressTokens,218,350).join(' '));
+    const payment=cprBandText(block,348,412),paymentParts=payment.split('/').map(v=>v.trim()).filter(Boolean);
+    const taxOffice=cprBandText(block,125,180),status=cprBandText(block,178,220);
+    const amountAgainst=cprFirstNumeric(block,410,540),taxAmount=cprFirstNumeric(block,540,610);
+    if(!ntnCnic&&!taxpayerName)continue;
+    rows.push({sr:start.sr,ntnCnic,taxOffice,status,taxpayerName,address,paymentSection:paymentParts[0]||'',namCode:paymentParts.slice(1).join(' / '),amountAgainst,taxAmount});
+  }
+  return rows.sort((a,b)=>a.sr-b.sr);
+}
+async function importCprPdf(file,progress){
+  progress.textContent='Loading PDF engine...';
+  const pages=await readPdfFilePages(file,progress,'Reading CPR page');
+  progress.textContent='Reading CPR header and taxpayer records...';await yieldToBrowser();
+  const meta=parseCprMetaFromPages(pages,file.name),rows=parseCprRecordsFromPages(pages);
+  if(!meta.monthYear)throw new Error('The CPR Month/Year could not be detected.');
+  if(!meta.cprNo)throw new Error('The CPR number could not be detected.');
+  if(!rows.length)throw new Error('No taxpayer records were extracted from the CPR PDF.');
+  if(meta.expectedTaxpayers&&Math.abs(meta.expectedTaxpayers-rows.length)>2)throw new Error(`The PDF states ${meta.expectedTaxpayers} taxpayers, but only ${rows.length} records were extracted. Please use the original text-based CPR PDF.`);
+  const existing=(db.cprImports||[]).filter(report=>report.monthYear===meta.monthYear);
+  if(existing.length&&!window.confirm(`${meta.monthYear} CPR data is already uploaded. Replace the existing monthly report?`))throw new Error('Import cancelled.');
+  for(const report of existing){db.cprRows=db.cprRows.filter(row=>row.importId!==report.id);db.cprImports=db.cprImports.filter(r=>r.id!==report.id);await deleteCprOriginalFile(report.id);}
+  const importId=uid(),reportDate=toIsoDate(meta.paymentDate)||`${meta.year}-${String(meta.month).padStart(2,'0')}-01`;
+  db.cprImports.push({id:importId,filename:file.name,active:true,date:new Date().toISOString(),reportDate,monthYear:meta.monthYear,month:meta.month,year:meta.year,fiscalYear:meta.fiscalYear,meta,rows:rows.length});
+  db.cprRows.push(...rows.map(row=>({...row,id:uid(),importId})));
+  progress.textContent='Saving CPR records and original PDF...';await saveDB();
+  const originalStored=await storeCprOriginalFile(importId,file);
+  return{importId,meta,rows:rows.length,originalStored};
+}
+function selectedCprReport(){return(db.cprImports||[]).find(r=>r.id===selectedCprPreviewId)||reportsNewestFirst(db.cprImports||[])[0]||null;}
+function fillCprReportSelect(){
+  const select=$('#cprPreviewReport');if(!select)return;
+  const reports=reportsNewestFirst(db.cprImports||[]);if(!reports.some(r=>r.id===selectedCprPreviewId))selectedCprPreviewId=reports[0]?.id||null;
+  select.innerHTML=reports.length?reports.map(r=>`<option value="${r.id}">${escapeHtml(r.filename)} • ${escapeHtml(r.monthYear||displayDate(r.reportDate))}</option>`).join(''):'<option value="">No CPR reports</option>';
+  select.value=selectedCprPreviewId||'';
+}
+function fillCprFiscalYearSelects(){
+  const years=cprFiscalYears(),preferred=selectedCprReport()?.fiscalYear||reportsNewestFirst(db.cprImports||[])[0]?.fiscalYear||cprCurrentFiscalYear();
+  ['cprStatusFiscalYear','cprCertificateFiscalYear'].forEach(id=>{const select=$('#'+id);if(!select)return;const old=select.value;select.innerHTML=years.map(y=>`<option value="${y}">${y}</option>`).join('');select.value=years.includes(old)?old:(years.includes(preferred)?preferred:(years[0]||''));});
+}
+function cprActionIcon(name){
+  const icons={
+    records:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16M8 3v18"/></svg>',
+    preview:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>',
+    download:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>',
+    deactivate:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v8"/><path d="M6.3 5.6a8 8 0 1 0 11.4 0"/></svg>',
+    activate:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12.5 11 15l5-6"/><circle cx="12" cy="12" r="9"/></svg>',
+    delete:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 14h10l1-14M10 11v6m4-6v6"/></svg>'
+  };
+  return icons[name]||'';
+}
+function cprIconAction(action,id,label,icon,tone=''){
+  return `<button class="cpr-icon-btn ${tone}" type="button" data-${action}="${id}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${cprActionIcon(icon)}</button>`;
+}
+function renderCprMonthStatus(){
+  const wrap=$('#cprMonthStatus');if(!wrap)return;const fy=$('#cprStatusFiscalYear')?.value||cprFiscalYears()[0],months=cprFiscalMonths(fy);
+  wrap.innerHTML=months.map(month=>{
+    const report=reportsNewestFirst(db.cprImports||[]).find(r=>r.monthYear===month.key);
+    const cardState=report?(report.active===false?'deactivated':'uploaded'):'missing';
+    const selected=report&&report.id===selectedCprPreviewId?' selected':'';
+    const actions=report?`<div class="cpr-month-actions" aria-label="Actions for ${escapeHtml(month.label)}">${cprIconAction('cpr-preview-records',report.id,'Preview extracted records','records')}${cprIconAction('cpr-open-original',report.id,'Preview original PDF','preview')}${cprIconAction('cpr-download-original',report.id,'Download original PDF','download')}${cprIconAction('cpr-toggle-report',report.id,report.active===false?'Activate report':'Deactivate report',report.active===false?'activate':'deactivate',report.active===false?'activate':'')}${cprIconAction('cpr-delete-report',report.id,'Delete report','delete','danger')}</div>`:'';
+    return `<div class="cpr-month-card ${cardState}${selected}"><div class="cpr-month-card-head"><strong>${escapeHtml(month.label)}</strong><span class="badge ${report?(report.active===false?'inactive':'active'):'pending'}">${report?(report.active===false?'Deactivated':'Uploaded'):'Not Uploaded'}</span></div><p>${report?`<b>${escapeHtml(report.filename)}</b><br>${report.rows||0} records • CPR ${escapeHtml(report.meta?.cprNo||'-')}`:'Monthly CPR PDF is pending.'}</p>${actions}</div>`;
+  }).join('');
+}
+function cprImportBadge(report){return `<span class="badge ${report.active===false?'inactive':'active'}">${report.active===false?'Inactive':'Active'}</span>`;}
+function renderCprAdminImports(){
+  const wrap=$('#cprAdminImports');if(!wrap)return;const reports=reportsNewestFirst(db.cprImports||[]);
+  wrap.innerHTML=reports.map(r=>`<div class="extracted-file-card"><div class="extracted-file-info"><div><strong>${escapeHtml(r.filename)}</strong> ${cprImportBadge(r)}</div><div class="muted">Filing month ${escapeHtml(r.monthYear||'-')} • CPR ${escapeHtml(r.meta?.cprNo||'-')} • ${r.rows||0} records</div></div><div class="extracted-file-actions"><button class="btn btn-outline" type="button" data-cpr-preview-records="${r.id}">Preview Records</button><button class="btn btn-outline" type="button" data-cpr-open-original="${r.id}">Preview Original</button><button class="btn btn-outline" type="button" data-cpr-download-original="${r.id}">Download Original</button><button class="btn btn-outline" type="button" data-cpr-toggle-report="${r.id}">${r.active===false?'Activate':'Deactivate'}</button><button class="btn btn-danger" type="button" data-cpr-delete-report="${r.id}">Delete</button></div></div>`).join('')||'<p class="muted">No CPR report has been imported.</p>';
+}
+function cprFilterValues(){return{sr:$('#cprFilterSr')?.value||'',ntn:($('#cprFilterNtn')?.value||'').trim().toLowerCase(),taxOffice:$('#cprFilterTaxOffice')?.value||'',status:$('#cprFilterStatus')?.value||'',taxpayer:($('#cprFilterTaxpayer')?.value||'').trim().toLowerCase(),payment:$('#cprFilterPayment')?.value||'',amountMin:$('#cprFilterAmountMin')?.value||'',amountMax:$('#cprFilterAmountMax')?.value||'',taxMin:$('#cprFilterTaxMin')?.value||'',taxMax:$('#cprFilterTaxMax')?.value||''};}
+function getCprFilteredRows(){
+  const report=selectedCprReport();if(!report)return[];const f=cprFilterValues();
+  return(db.cprRows||[]).filter(r=>r.importId===report.id)
+    .filter(r=>!f.sr||Number(r.sr)===Number(f.sr))
+    .filter(r=>!f.ntn||String(r.ntnCnic||'').toLowerCase().includes(f.ntn))
+    .filter(r=>!f.taxOffice||r.taxOffice===f.taxOffice)
+    .filter(r=>!f.status||r.status===f.status)
+    .filter(r=>!f.taxpayer||`${r.taxpayerName||''} ${r.address||''}`.toLowerCase().includes(f.taxpayer))
+    .filter(r=>!f.payment||`${r.paymentSection||''} / ${r.namCode||''}`===f.payment)
+    .filter(r=>String(f.amountMin)===''||number(r.amountAgainst)>=Number(f.amountMin))
+    .filter(r=>String(f.amountMax)===''||number(r.amountAgainst)<=Number(f.amountMax))
+    .filter(r=>String(f.taxMin)===''||number(r.taxAmount)>=Number(f.taxMin))
+    .filter(r=>String(f.taxMax)===''||number(r.taxAmount)<=Number(f.taxMax))
+    .sort((a,b)=>number(a.sr)-number(b.sr));
+}
+function refreshCprFilterOptions(){
+  const report=selectedCprReport(),rows=(db.cprRows||[]).filter(r=>!report||r.importId===report.id);
+  const setOptions=(id,values,label)=>{const select=$('#'+id);if(!select)return;const old=select.value;select.innerHTML=`<option value="">${label}</option>`+[...new Set(values.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b))).map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');if([...select.options].some(o=>o.value===old))select.value=old;};
+  setOptions('cprFilterTaxOffice',rows.map(r=>r.taxOffice),'All tax offices');setOptions('cprFilterStatus',rows.map(r=>r.status),'All statuses');setOptions('cprFilterPayment',rows.map(r=>`${r.paymentSection||''} / ${r.namCode||''}`),'All sections');
+}
+function cprReportMetaHtml(report){
+  if(!report)return'';const m=report.meta||{};
+  return `<div class="cpr-meta-title"><strong>INCOME TAX DEPARTMENT</strong><span>COMPUTERIZED PAYMENT RECEIPT (CPR - IT)</span></div><div class="cpr-meta-grid"><span><b>CPR No:</b> ${escapeHtml(m.cprNo||'-')}</span><span><b>Payment Date:</b> ${escapeHtml(m.paymentDate||'-')}</span><span><b>Payment Section:</b> ${escapeHtml(m.paymentSection||'-')}</span><span><b>RTO/LTO:</b> ${escapeHtml(m.rtoLto||'-')}</span><span><b>Nature of Payment:</b> ${escapeHtml(m.nature||'-')}</span><span><b>Tax Year:</b> ${escapeHtml(m.taxYear||'-')}</span><span><b>Account Head (NAM):</b> ${escapeHtml(m.accountHead||'-')}</span><span><b>Month/Year:</b> ${escapeHtml(m.monthYear||'-')}</span><span><b>Registration / Inc No.:</b> ${escapeHtml(m.registrationNo||'-')}</span><span><b>Withholding Agent:</b> ${escapeHtml(m.agentName||'-')}</span></div>`;
+}
+function cprRecordsTableHtml(rows){
+  return `<div class="top-scrollbar-wrap"><div class="top-scrollbar"><div></div></div><div class="table-scroll"><table class="data-table cpr-records-table"><thead><tr><th>Sr.</th><th>NTN / CNIC</th><th>Tax Office</th><th>Status</th><th>Taxpayer's/Business Name &amp;<br>Address</th><th>Payment Section<br>/ NAM Code</th><th>Amount against which<br>tax is being withheld</th><th>Tax Amount</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${number(r.sr)}</td><td>${escapeHtml(r.ntnCnic||'')}</td><td>${escapeHtml(r.taxOffice||'')}</td><td>${escapeHtml(r.status||'')}</td><td class="cpr-taxpayer-cell"><strong>${escapeHtml(r.taxpayerName||'')}</strong><span>${escapeHtml(r.address||'')}</span></td><td>${escapeHtml(r.paymentSection||'')} / ${escapeHtml(r.namCode||'')}</td><td class="number-cell">${money(r.amountAgainst)}</td><td class="number-cell">${money(r.taxAmount)}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function renderCprPreview(){
+  const report=selectedCprReport(),name=$('#cprPreviewReportName'),meta=$('#cprReportMeta'),wrap=$('#cprRecordsTableWrap'),stats=$('#cprPreviewStats'),pager=$('#cprPagination');if(!wrap)return;
+  if(name)name.textContent=report?.filename||'No report selected';if(meta)meta.innerHTML=cprReportMetaHtml(report);
+  const rows=getCprFilteredRows(),totalPages=Math.max(1,Math.ceil(rows.length/CPR_PAGE_SIZE));cprPreviewPage=Math.min(Math.max(1,cprPreviewPage),totalPages);const shown=rows.slice((cprPreviewPage-1)*CPR_PAGE_SIZE,cprPreviewPage*CPR_PAGE_SIZE),totals=rows.reduce((a,r)=>({base:a.base+number(r.amountAgainst),tax:a.tax+number(r.taxAmount)}),{base:0,tax:0});
+  if(stats)stats.innerHTML=`<span><b>${rows.length}</b> records</span><span><b>${money(totals.base)}</b> withheld amount</span><span><b>${money(totals.tax)}</b> tax amount</span>`;
+  wrap.innerHTML=!report?'<div class="empty-state">No CPR report has been imported.</div>':shown.length?cprRecordsTableHtml(shown):'<div class="empty-state">No CPR records match the selected filters.</div>';
+  if(pager)pager.innerHTML=rows.length>CPR_PAGE_SIZE?`<button class="btn btn-outline" type="button" data-cpr-page="prev" ${cprPreviewPage<=1?'disabled':''}>Previous</button><span>Page ${cprPreviewPage} of ${totalPages} • Showing ${shown.length} of ${rows.length} records</span><button class="btn btn-outline" type="button" data-cpr-page="next" ${cprPreviewPage>=totalPages?'disabled':''}>Next</button>`:'';
+  initTopScrollbars();
+}
+function fillCprCertificateTaxpayers(){
+  const fy=$('#cprCertificateFiscalYear')?.value||cprFiscalYears()[0],reports=(db.cprImports||[]).filter(r=>r.fiscalYear===fy&&r.active!==false),ids=new Set(reports.map(r=>r.id)),map=new Map();
+  (db.cprRows||[]).filter(r=>ids.has(r.importId)&&r.ntnCnic).forEach(r=>map.set(r.ntnCnic,r));
+  const select=$('#cprCertificateTaxpayer');if(!select)return;const old=select.value,records=[...map.values()].sort((a,b)=>String(a.taxpayerName).localeCompare(String(b.taxpayerName)));
+  select.innerHTML='<option value="">Select taxpayer</option>'+records.map(r=>`<option value="${escapeHtml(r.ntnCnic)}">${escapeHtml(r.taxpayerName)} • ${escapeHtml(r.ntnCnic)}</option>`).join('');if(map.has(old))select.value=old;
+  renderCprCertificateSelectionSummary();
+}
+function buildCprCertificateData(){
+  const fiscalYear=$('#cprCertificateFiscalYear')?.value||'',ntnCnic=$('#cprCertificateTaxpayer')?.value||'';if(!fiscalYear||!ntnCnic)return null;
+  const reports=(db.cprImports||[]).filter(r=>r.fiscalYear===fiscalYear&&r.active!==false),reportMap=new Map(reports.map(r=>[r.id,r])),identityRows=(db.cprRows||[]).filter(r=>reportMap.has(r.importId)&&r.ntnCnic===ntnCnic),latest=identityRows.at(-1);if(!latest)return null;
+  const months=cprFiscalMonths(fiscalYear).map(month=>{const monthReports=reports.filter(r=>r.monthYear===month.key),ids=new Set(monthReports.map(r=>r.id)),rows=identityRows.filter(r=>ids.has(r.importId)),cprNos=[...new Set(monthReports.filter(report=>rows.some(row=>row.importId===report.id)).map(r=>r.meta?.cprNo).filter(Boolean))];return{...month,cprNo:cprNos.length?cprNos.join(' / '):'00',taxPaid:rows.reduce((s,r)=>s+number(r.taxAmount),0),totalTax:rows.reduce((s,r)=>s+number(r.amountAgainst),0)};});
+  return{fiscalYear,ntnCnic,taxpayerName:latest.taxpayerName||'',address:latest.address||'',months,totalTaxPaid:months.reduce((s,m)=>s+m.taxPaid,0),grandTotalTax:months.reduce((s,m)=>s+m.totalTax,0)};
+}
+function renderCprCertificateSelectionSummary(){
+  const wrap=$('#cprCertificateSelectionSummary');if(!wrap)return;const data=buildCprCertificateData();wrap.innerHTML=data?`<div class="demo-box"><strong>${escapeHtml(data.taxpayerName)}</strong><br>${escapeHtml(data.ntnCnic)} • ${escapeHtml(data.address||'No address')}<br>${data.months.filter(m=>m.taxPaid||m.totalTax).length} uploaded filing months available for certificate generation.</div>`:'<p class="muted">Select a fiscal year and taxpayer/business to generate the certificate.</p>';
+}
+function cprCertificateTableRows(data){
+  return [...data.months.map(m=>({cprNo:m.cprNo,taxPaid:m.taxPaid,totalTax:m.totalTax,month:m.label,isTotal:false})),{cprNo:'Total',taxPaid:data.totalTaxPaid,totalTax:data.grandTotalTax,month:'',isTotal:true}];
+}
+function cprCertificateHtml(data){
+  const rows=cprCertificateTableRows(data);
+  return `<div class="cpr-certificate-sheet"><div class="cpr-letterhead"><div class="cpr-te-mark">TE</div><div><h2>TAWAKAL ENTERPRISES CHANNEL-II</h2><h3>PHARMACEUTICAL DISTRIBUTORS</h3><div class="cpr-equals">================================</div><p>Bungalow No 4, Block-A, Unit # 2 Latifabad Hyderabad</p><p>Phone: 022-3407656, 022-3407593</p><div class="cpr-equals">================================</div></div></div><div class="cpr-certificate-title"><h3>PURCHASE &amp; WITH HOLDING TAX DEDUCTION MONTH OF</h3><h3>${escapeHtml(data.fiscalYear.split('-')[0]?'JULY-'+data.fiscalYear.split('-')[0]+' TO JUNE-'+data.fiscalYear.split('-')[1]:'')}</h3><h3>N.I.C NO ${escapeHtml(data.ntnCnic)}</h3><h3>${escapeHtml(data.taxpayerName)}</h3>${data.address?`<p>${escapeHtml(data.address)}</p>`:''}</div><table class="cpr-certificate-table"><thead><tr><th>CPR NO</th><th>Tax Paid</th><th>Total Tax</th><th>Month</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.isTotal?'certificate-total':''}"><td>${escapeHtml(r.cprNo)}</td><td>${money(r.taxPaid)}</td><td>${money(r.totalTax)}</td><td>${escapeHtml(r.month)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function showCprCertificatePreview(){
+  const data=buildCprCertificateData();if(!data)return toast('Select a fiscal year and taxpayer first');currentCprCertificateData=data;$('#cprCertificatePreview').innerHTML=cprCertificateHtml(data);const modal=$('#cprCertificateModal');modal.classList.add('show');modal.setAttribute('aria-hidden','false');
+}
+function closeCprCertificateModal(){const modal=$('#cprCertificateModal');modal.classList.remove('show');modal.setAttribute('aria-hidden','true');}
+function addCprReportHeader(doc,report){
+  const m=report.meta||{},w=doc.internal.pageSize.getWidth();doc.setDrawColor(0);doc.setLineWidth(1);doc.rect(28,22,w-56,48);doc.setFillColor(31,103,151);doc.rect(28,22,92,48,'F');doc.setTextColor(255);doc.setFont('helvetica','bold');doc.setFontSize(18);doc.text('FBR',74,52,{align:'center'});doc.setTextColor(0);doc.setFontSize(14);doc.text('INCOME TAX DEPARTMENT',w/2,40,{align:'center'});doc.setFontSize(10);doc.text('COMPUTERIZED PAYMENT RECEIPT ( CPR - IT )',w/2,58,{align:'center'});doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text('SBP Banking Services Corporation',28,86);doc.text('Alternative Delivery Channel - ADC, ISLAMABAD (0101)',w-28,86,{align:'right'});doc.setFont('helvetica','bold');doc.setFontSize(8);doc.text(`CPR No: ${m.cprNo||'-'}`,28,110);doc.text(`Payment Date: ${m.paymentDate||'-'}`,w-28,110,{align:'right'});doc.setFontSize(7);const paymentLines=doc.splitTextToSize(`Payment Section: ${m.paymentSection||'-'}`,330);doc.text(paymentLines,28,126);doc.text(`RTO/LTO: ${m.rtoLto||'-'}`,w-28,126,{align:'right'});const paymentHeight=Math.max(1,paymentLines.length)*8;let y=126+paymentHeight+8;doc.text(`Nature of Payment: ${m.nature||'-'}`,28,y);doc.text(`Tax Year: ${m.taxYear||'-'}`,w-28,y,{align:'right'});y+=14;doc.text(`Account Head (NAM): ${m.accountHead||'-'}`,28,y);doc.text(`Month/Year: ${m.monthYear||'-'}`,w-28,y,{align:'right'});y+=22;doc.setFontSize(8.5);doc.text('Particulars of Withholding Agent',28,y);doc.setLineWidth(.5);doc.line(28,y+3,190,y+3);y+=24;doc.setFontSize(7.2);doc.text(`Registration / Inc No.: ${m.registrationNo||'-'}`,28,y);y+=14;const agentLines=doc.splitTextToSize(`Name: ${m.agentName||'-'}`,360);doc.text(agentLines,28,y);y+=Math.max(1,agentLines.length)*9+6;doc.text(`No. of Tax Payers: ${m.expectedTaxpayers||report.rows||0}`,28,y);y+=22;doc.setFontSize(9);doc.text('Details of Tax Payers',28,y);return y+7;
+}
+function cprTxtReport(){
+  const report=selectedCprReport(),rows=getCprFilteredRows();if(!report||!rows.length)return null;const m=report.meta||{},lines=['INCOME TAX DEPARTMENT','COMPUTERIZED PAYMENT RECEIPT ( CPR - IT )',`CPR No: ${m.cprNo||'-'}    Payment Date: ${m.paymentDate||'-'}`,`Payment Section: ${m.paymentSection||'-'}    RTO/LTO: ${m.rtoLto||'-'}`,`Nature of Payment: ${m.nature||'-'}    Tax Year: ${m.taxYear||'-'}`,`Account Head (NAM): ${m.accountHead||'-'}    Month/Year: ${m.monthYear||'-'}`,`Registration / Inc No.: ${m.registrationNo||'-'}`,`Name: ${m.agentName||'-'}`,'',['Sr.','NTN / CNIC','Tax Office','Status',"Taxpayer's/Business Name & Address",'Payment Section / NAM Code','Amount against which tax is being withheld','Tax Amount'].join('\t')];rows.forEach(r=>lines.push([r.sr,r.ntnCnic,r.taxOffice,r.status,`${r.taxpayerName} ${r.address}`,`${r.paymentSection} / ${r.namCode}`,r.amountAgainst,r.taxAmount].join('\t')));return lines.join('\n');
+}
+function buildCprReportPdfDoc(){
+  const report=selectedCprReport(),rows=getCprFilteredRows(),jsPDF=window.jspdf?.jsPDF;if(!report||!rows.length||!jsPDF||typeof jsPDF!=='function')return null;
+  try{const doc=new jsPDF({orientation:'portrait',unit:'pt',format:'a4'});const startY=addCprReportHeader(doc,report);if(typeof doc.autoTable!=='function')return null;doc.autoTable({startY,head:[['Sr.','NTN / CNIC','Tax Office','Status',"Taxpayer's/Business Name & Address",'Payment Section / NAM Code','Amount against which tax is being withheld','Tax Amount']],body:rows.map(r=>[r.sr,r.ntnCnic,r.taxOffice,r.status,`${r.taxpayerName}\n${r.address}`,`${r.paymentSection} / ${r.namCode}`,money(r.amountAgainst),money(r.taxAmount)]),theme:'plain',styles:{fontSize:5.4,cellPadding:2,overflow:'linebreak',lineColor:[0,0,0],lineWidth:.2,textColor:[0,0,0],valign:'top'},headStyles:{fontStyle:'bold',lineWidth:.6,halign:'center'},columnStyles:{0:{cellWidth:22,halign:'center'},1:{cellWidth:70},2:{cellWidth:50},3:{cellWidth:32},4:{cellWidth:125},5:{cellWidth:70},6:{cellWidth:78,halign:'right'},7:{cellWidth:55,halign:'right'}},margin:{left:24,right:24,bottom:28},didDrawPage:data=>{if(data.pageNumber>1){doc.setFont('helvetica','bold');doc.setFontSize(8);doc.text(`CPR No: ${report.meta?.cprNo||'-'}  |  Month/Year: ${report.monthYear||'-'}`,24,18);}}});return doc;}catch(err){console.warn(err);return null;}
+}
+function buildCprCertificatePdfDoc(data){
+  const jsPDF=window.jspdf?.jsPDF;if(!data||!jsPDF||typeof jsPDF!=='function')return null;
+  try{
+    const doc=new jsPDF({orientation:'portrait',unit:'pt',format:'a4'}),w=doc.internal.pageSize.getWidth(),rows=cprCertificateTableRows(data);
+    doc.setTextColor(0);
+    doc.setFont('times','bold');doc.setFontSize(32);doc.text('TE',78,104,{align:'center'});
+    doc.setFontSize(16);doc.text('TAWAKAL ENTERPRISES CHANNEL-II',w/2,106,{align:'center'});
+    doc.setFontSize(13);doc.text('PHARMACEUTICAL DISTRIBUTORS',w/2,130,{align:'center'});
+    doc.setFontSize(10);doc.text('================================',w/2,147,{align:'center'});
+    doc.setFont('times','italic');doc.text('Bungalow No 4, Block-A, Unit # 2 Latifabad Hyderabad',w/2,162,{align:'center'});doc.text('Phone: 022-3407656, 022-3407593',w/2,178,{align:'center'});
+    doc.setFont('times','bold');doc.text('================================',w/2,194,{align:'center'});
+    doc.setFontSize(12);doc.text('PURCHASE & WITH HOLDING TAX DEDUCTION MONTH OF',w/2,226,{align:'center'});doc.text(`JULY-${data.fiscalYear.split('-')[0]} TO JUNE-${data.fiscalYear.split('-')[1]}`,w/2,254,{align:'center'});doc.text(`N.I.C NO ${data.ntnCnic}`,w/2,282,{align:'center'});doc.text(data.taxpayerName,w/2,304,{align:'center'});
+    let startY=320;if(data.address){doc.setFont('times','normal');doc.setFontSize(9);const addressLines=doc.splitTextToSize(data.address,w-100);doc.text(addressLines,w/2,320,{align:'center'});startY=320+(addressLines.length*11)+12;}
+    if(typeof doc.autoTable!=='function')return null;
+    doc.autoTable({
+      startY,
+      head:[['CPR NO','Tax Paid','Total Tax','Month']],
+      body:rows.map(r=>[r.cprNo,money(r.taxPaid),money(r.totalTax),r.month]),
+      theme:'grid',
+      styles:{font:'times',fontSize:8,cellPadding:4,lineColor:[0,0,0],lineWidth:.5,halign:'center',valign:'middle',textColor:[0,0,0],fillColor:[255,255,255]},
+      headStyles:{fillColor:[255,255,255],textColor:[0,0,0],fontStyle:'bold',lineColor:[0,0,0],lineWidth:.5},
+      columnStyles:{0:{cellWidth:245},1:{cellWidth:80},2:{cellWidth:100},3:{cellWidth:100}},
+      margin:{left:35,right:35},
+      didParseCell:hook=>{if(hook.section==='body'&&rows[hook.row.index]?.isTotal)hook.cell.styles.fontStyle='bold';}
+    });
+    return doc;
+  }catch(err){console.warn(err);return null;}
+}
+async function renderCprCertificateCanvas(data){
+  const host=document.createElement('div');
+  host.className='cpr-certificate-capture-host';
+  host.setAttribute('aria-hidden','true');
+  host.innerHTML=cprCertificateHtml(data);
+  document.body.appendChild(host);
+  try{
+    if(document.fonts?.ready)await document.fonts.ready;
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const sheet=host.querySelector('.cpr-certificate-sheet');
+    if(!sheet)return null;
+    sheet.style.zoom='1';
+    sheet.style.transform='none';
+    const rect=sheet.getBoundingClientRect(),width=Math.ceil(rect.width||760),height=Math.ceil(Math.max(rect.height||0,sheet.scrollHeight||1060));
+    if(typeof window.html2canvas==='function'){
+      return await window.html2canvas(sheet,{backgroundColor:'#ffffff',scale:3,useCORS:true,logging:false,width,height,windowWidth:width,windowHeight:height,scrollX:0,scrollY:0});
+    }
+    const clone=sheet.cloneNode(true);
+    clone.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
+    clone.style.margin='0';clone.style.zoom='1';clone.style.transform='none';clone.style.width=`${width}px`;clone.style.height=`${height}px`;clone.style.minHeight=`${height}px`;
+    let css='';
+    [...document.styleSheets].forEach(styleSheet=>{try{css+=[...styleSheet.cssRules].map(rule=>rule.cssText).join('\n');}catch(_){}});
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;background:#fff;"><style>*{box-sizing:border-box}.cpr-certificate-sheet{zoom:1!important;transform:none!important;margin:0!important}${css}</style>${clone.outerHTML}</div></foreignObject></svg>`;
+    const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}));
+    try{
+      const image=new Image();
+      await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Certificate image could not be rendered'));image.src=url;});
+      const scale=3,canvas=document.createElement('canvas');canvas.width=width*scale;canvas.height=height*scale;
+      const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0,canvas.width,canvas.height);
+      return canvas;
+    }finally{URL.revokeObjectURL(url);}
+  }finally{host.remove();}
+}
+function canvasToJpegBlob(canvas,quality=.96){
+  return new Promise((resolve,reject)=>{
+    if(!canvas)return reject(new Error('Certificate canvas is not available'));
+    if(typeof canvas.toBlob==='function'){
+      canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Certificate image could not be created')),'image/jpeg',quality);
+      return;
+    }
+    try{
+      const dataUrl=canvas.toDataURL('image/jpeg',quality),binary=atob(dataUrl.split(',')[1]||''),bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      resolve(new Blob([bytes],{type:'image/jpeg'}));
+    }catch(err){reject(err);}
+  });
+}
+function concatUint8Arrays(parts){
+  const size=parts.reduce((sum,part)=>sum+part.length,0),result=new Uint8Array(size);let offset=0;
+  parts.forEach(part=>{result.set(part,offset);offset+=part.length;});
+  return result;
+}
+async function buildImagePdfBlob(imageBlob,pixelWidth,pixelHeight){
+  if(!imageBlob||!pixelWidth||!pixelHeight)return null;
+  const encoder=new TextEncoder(),jpeg=new Uint8Array(await imageBlob.arrayBuffer()),pageWidth=595.28,pageHeight=841.89,ratio=Math.min(pageWidth/pixelWidth,pageHeight/pixelHeight),imageWidth=pixelWidth*ratio,imageHeight=pixelHeight*ratio,x=(pageWidth-imageWidth)/2,y=(pageHeight-imageHeight)/2;
+  const content=`q\n${imageWidth.toFixed(3)} 0 0 ${imageHeight.toFixed(3)} ${x.toFixed(3)} ${y.toFixed(3)} cm\n/Im0 Do\nQ`;
+  const objectBodies=[
+    encoder.encode('<< /Type /Catalog /Pages 2 0 R >>'),
+    encoder.encode('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
+    encoder.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`),
+    encoder.encode(`<< /Length ${encoder.encode(content).length} >>\nstream\n${content}\nendstream`),
+    concatUint8Arrays([encoder.encode(`<< /Type /XObject /Subtype /Image /Width ${pixelWidth} /Height ${pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`),jpeg,encoder.encode('\nendstream')])
+  ];
+  const chunks=[encoder.encode('%PDF-1.4\n%Tawakal Enterprises Certificate\n')],offsets=[0];let byteOffset=chunks[0].length;
+  objectBodies.forEach((body,index)=>{
+    offsets[index+1]=byteOffset;
+    const objectChunk=concatUint8Arrays([encoder.encode(`${index+1} 0 obj\n`),body,encoder.encode('\nendobj\n')]);
+    chunks.push(objectChunk);byteOffset+=objectChunk.length;
+  });
+  const xrefOffset=byteOffset;
+  let xref='xref\n0 6\n0000000000 65535 f \n';
+  for(let id=1;id<=5;id++)xref+=`${String(offsets[id]).padStart(10,'0')} 00000 n \n`;
+  xref+=`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  chunks.push(encoder.encode(xref));
+  return new Blob(chunks,{type:'application/pdf'});
+}
+async function buildExactCprCertificatePdfBlob(data){
+  if(!data)return null;
+  try{
+    const canvas=await renderCprCertificateCanvas(data);if(!canvas)throw new Error('Certificate preview could not be captured');
+    const jpeg=await canvasToJpegBlob(canvas);
+    const exactPdf=await buildImagePdfBlob(jpeg,canvas.width,canvas.height);
+    if(exactPdf)return exactPdf;
+    throw new Error('Certificate PDF could not be created');
+  }catch(err){
+    console.warn('Exact certificate capture failed; using vector fallback.',err);
+    const fallback=buildCprCertificatePdfDoc(data);
+    if(fallback){try{return fallback.output('blob');}catch(outputError){console.warn(outputError);}}
+    return buildSimpleTextPdfBlob(cprCertificatePlainText(data));
+  }
+}
+async function downloadCprCertificatePdf(data){
+  if(!data)return toast('Certificate data is not available');
+  const blob=await buildExactCprCertificatePdfBlob(data);if(!blob)return toast('Certificate data is not available');
+  downloadPdfBlob(blob,`${safeReportFileName(data.taxpayerName)}-${data.fiscalYear}-CPR-Certificate.pdf`);
+}
+function cprCertificatePlainText(data){if(!data)return null;const lines=['TAWAKAL ENTERPRISES CHANNEL-II','PHARMACEUTICAL DISTRIBUTORS','Bungalow No 4, Block-A, Unit # 2 Latifabad Hyderabad','Phone: 022-3407656, 022-3407593','',`PURCHASE & WITH HOLDING TAX DEDUCTION MONTH OF JULY-${data.fiscalYear.split('-')[0]} TO JUNE-${data.fiscalYear.split('-')[1]}`,`N.I.C NO ${data.ntnCnic}`,data.taxpayerName,data.address||'','',['CPR NO','Tax Paid','Total Tax','Month'].join('\t')];data.months.forEach(m=>lines.push([m.cprNo,m.taxPaid,m.totalTax,m.label].join('\t')));lines.push(['Total',data.totalTaxPaid,data.grandTotalTax,''].join('\t'));return lines.join('\n');}
+function renderCprAdmin(){fillCprFiscalYearSelects();fillCprReportSelect();refreshCprFilterOptions();renderCprMonthStatus();renderCprPreview();fillCprCertificateTaxpayers();}
+
+const cprPreviewReport=$('#cprPreviewReport');if(cprPreviewReport)cprPreviewReport.addEventListener('change',()=>{selectedCprPreviewId=cprPreviewReport.value||null;cprPreviewPage=1;refreshCprFilterOptions();renderCprPreview();});
+const cprStatusFiscalYear=$('#cprStatusFiscalYear');if(cprStatusFiscalYear)cprStatusFiscalYear.addEventListener('change',renderCprMonthStatus);
+const cprCertificateFiscalYear=$('#cprCertificateFiscalYear');if(cprCertificateFiscalYear)cprCertificateFiscalYear.addEventListener('change',fillCprCertificateTaxpayers);
+const cprCertificateTaxpayer=$('#cprCertificateTaxpayer');if(cprCertificateTaxpayer)cprCertificateTaxpayer.addEventListener('change',renderCprCertificateSelectionSummary);
+['cprFilterSr','cprFilterNtn','cprFilterTaxOffice','cprFilterStatus','cprFilterTaxpayer','cprFilterPayment','cprFilterAmountMin','cprFilterAmountMax','cprFilterTaxMin','cprFilterTaxMax'].forEach(id=>{const el=$('#'+id);if(el)el.addEventListener('input',()=>{cprPreviewPage=1;renderCprPreview();});});
+const resetCprFilters=$('#resetCprFilters');if(resetCprFilters)resetCprFilters.addEventListener('click',()=>{['cprFilterSr','cprFilterNtn','cprFilterTaxOffice','cprFilterStatus','cprFilterTaxpayer','cprFilterPayment','cprFilterAmountMin','cprFilterAmountMax','cprFilterTaxMin','cprFilterTaxMax'].forEach(id=>{const el=$('#'+id);if(el)el.value='';});cprPreviewPage=1;renderCprPreview();});
+const extractCprBtn=$('#extractCprBtn');if(extractCprBtn)extractCprBtn.addEventListener('click',async()=>{const file=$('#cprPdfFile')?.files?.[0];if(!file)return toast('Select the monthly CPR PDF first');const progress=$('#cprImportProgress');extractCprBtn.disabled=true;try{const summary=await importCprPdf(file,progress);selectedCprPreviewId=summary.importId;cprPreviewPage=1;$('#cprImportSummary').innerHTML=`<div class="demo-box"><strong>${summary.rows}</strong> taxpayer records imported<br><strong>${escapeHtml(summary.meta.monthYear)}</strong> filing month detected<br><strong>${escapeHtml(summary.meta.cprNo)}</strong> CPR number detected<br>${summary.originalStored?'Original PDF saved for preview and download.':'Records imported, but this browser could not store the original PDF.'}</div>`;progress.textContent='CPR import complete.';renderCprAdmin();toast('Monthly CPR report imported');}catch(err){console.error(err);progress.textContent=`Import failed. ${err.message||'Use the original text-based CPR-IT PDF.'}`;if(err.message!=='Import cancelled.')toast('Could not import CPR report');}finally{extractCprBtn.disabled=false;}});
+const previewCprPdf=$('#previewCprPdf');if(previewCprPdf)previewCprPdf.addEventListener('click',()=>{const blob=pdfBlobFromDocOrText(buildCprReportPdfDoc(),cprTxtReport());if(!blob)return toast('No CPR records available');openPdfPreview(blob);});
+const downloadCprPdf=$('#downloadCprPdf');if(downloadCprPdf)downloadCprPdf.addEventListener('click',()=>{const report=selectedCprReport(),blob=pdfBlobFromDocOrText(buildCprReportPdfDoc(),cprTxtReport());if(!blob)return toast('No CPR records available');downloadPdfBlob(blob,`${safeReportFileName(report?.filename||'CPR-Report')}-${report?.monthYear?.replace('/','-')||'report'}.pdf`);});
+const previewCprCertificate=$('#previewCprCertificate');if(previewCprCertificate)previewCprCertificate.addEventListener('click',showCprCertificatePreview);
+const downloadCprCertificate=$('#downloadCprCertificate');if(downloadCprCertificate)downloadCprCertificate.addEventListener('click',()=>{const data=buildCprCertificateData();if(!data)return toast('Select a fiscal year and taxpayer first');downloadCprCertificatePdf(data);});
+const closeCprCertificate=$('#closeCprCertificateModal');if(closeCprCertificate)closeCprCertificate.addEventListener('click',closeCprCertificateModal);
+const cprCertificateModal=$('#cprCertificateModal');if(cprCertificateModal)cprCertificateModal.addEventListener('click',e=>{if(e.target.id==='cprCertificateModal')closeCprCertificateModal();});
+const downloadCprCertificateFromModal=$('#downloadCprCertificateFromModal');if(downloadCprCertificateFromModal)downloadCprCertificateFromModal.addEventListener('click',()=>{if(currentCprCertificateData)downloadCprCertificatePdf(currentCprCertificateData);});
+document.addEventListener('click',async e=>{
+  const actionEl=e.target.closest('[data-cpr-page],[data-cpr-preview-records],[data-cpr-open-original],[data-cpr-download-original],[data-cpr-toggle-report],[data-cpr-delete-report]');
+  if(!actionEl)return;
+  const pageAction=actionEl.dataset.cprPage;if(pageAction){cprPreviewPage+=pageAction==='next'?1:-1;renderCprPreview();return;}
+  const previewId=actionEl.dataset.cprPreviewRecords;if(previewId){selectedCprPreviewId=previewId;cprPreviewPage=1;fillCprReportSelect();refreshCprFilterOptions();renderCprMonthStatus();renderCprPreview();document.querySelector('.cpr-records-panel')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
+  const openId=actionEl.dataset.cprOpenOriginal;if(openId){const file=await getCprOriginalFile(openId);if(!file)return toast('Original PDF is not available in this browser');openPdfPreview(file);return;}
+  const downloadId=actionEl.dataset.cprDownloadOriginal;if(downloadId){const report=(db.cprImports||[]).find(r=>r.id===downloadId),file=await getCprOriginalFile(downloadId);if(!file)return toast('Original PDF is not available in this browser');downloadPdfBlob(file,report?.filename||'CPR-Report.pdf');return;}
+  const toggleId=actionEl.dataset.cprToggleReport;if(toggleId){const report=(db.cprImports||[]).find(r=>r.id===toggleId);if(report){report.active=report.active===false;await saveDB();renderCprAdmin();toast(report.active?'CPR report activated':'CPR report deactivated');}return;}
+  const deleteId=actionEl.dataset.cprDeleteReport;if(deleteId){const report=(db.cprImports||[]).find(r=>r.id===deleteId);if(!report)return;openConfirm({title:'Delete CPR report',message:`Delete ${report.filename} and all ${report.rows||0} extracted records?`,confirmText:'Delete report',danger:true,onConfirm:async()=>{db.cprImports=db.cprImports.filter(r=>r.id!==deleteId);db.cprRows=db.cprRows.filter(r=>r.importId!==deleteId);await deleteCprOriginalFile(deleteId);if(selectedCprPreviewId===deleteId)selectedCprPreviewId=null;await saveDB();closeConfirm();renderCprAdmin();toast('CPR report deleted');}});}
+});
+
+
 await loadBundledStock();await rematchPendingAreaPartyData(null);renderCompanySelect();saveDB();showView('login');
+
+// ===== Group Report: merged SSR + Area Wise + Party Wise =====
+let groupReportState={rows:[],date:'',companyId:'',group:'',item:'',area:'',party:'',search:''};
+function reportDateForImportId(imports,id){return imports.find(r=>r.id===id)?.reportDate||'';}
+function reportPeriod(value){return String(value||'').slice(0,7);}
+function activeImportIds(imports,date){const period=reportPeriod(date);return new Set(imports.filter(r=>r.active!==false&&(!period||reportPeriod(r.reportDate)===period)).map(r=>r.id));}
+function allGroupReportDates(){
+  return [...new Set([...db.imports,...db.areaWiseImports,...db.partyWiseImports].filter(r=>r.active!==false).map(r=>reportPeriod(r.reportDate)).filter(Boolean))].sort().reverse();
+}
+function groupReportLatestDate(){return allGroupReportDates()[0]||'';}
+function canonicalGroupKey(companyId,item){return `${companyId||''}|${normalizeProductName(cleanAreaItem(item||''))}`;}
+function mergedGroupReportData(){
+  const date=$('#groupReportDate')?.value||groupReportLatestDate();
+  const stockIds=activeImportIds(db.imports,date),areaIds=activeImportIds(db.areaWiseImports,date),partyIds=activeImportIds(db.partyWiseImports,date);
+  const companyId=$('#groupReportCompany')?.value||'',group=$('#groupReportGroup')?.value||'',itemFilter=$('#groupReportItem')?.value||'',areaFilter=$('#groupReportArea')?.value||'',partyFilter=$('#groupReportParty')?.value||'',search=String($('#groupReportSearch')?.value||'').trim().toLowerCase();
+  const stockRows=db.stock.filter(r=>stockIds.has(r.importId)&&(!companyId||r.companyId===companyId));
+  const areaRows=db.areaWiseRows.filter(r=>areaIds.has(r.importId)&&(!companyId||r.companyId===companyId));
+  const partyRows=db.partyWiseRows.filter(r=>partyIds.has(r.importId)&&(!companyId||r.companyId===companyId));
+  const areaMap=new Map(),partyMap=new Map();
+  areaRows.forEach(r=>{const key=canonicalGroupKey(r.companyId,r.item);if(!areaMap.has(key))areaMap.set(key,[]);areaMap.get(key).push(r);});
+  partyRows.forEach(r=>{const key=canonicalGroupKey(r.companyId,r.item);if(!partyMap.has(key))partyMap.set(key,[]);partyMap.get(key).push(r);});
+  const merged=stockRows.map(s=>{
+    const key=canonicalGroupKey(s.companyId,s.item);
+    let areas=(areaMap.get(key)||[]).flatMap(r=>Object.entries(r.areas||{}).map(([area,quantity])=>({area,quantity:number(quantity),amount:number(quantity)*number(r.tp)})));
+    let parties=(partyMap.get(key)||[]).map(r=>({partyName:r.partyName||r.party||'Unknown Party',area:r.area||'',qty:number(r.qty),bonus:number(r.bonus),unitTp:number(r.unitTp),tpAmount:number(r.tpAmount),netAmount:number(r.netAmount)}));
+    if(areaFilter)areas=areas.filter(a=>a.area===areaFilter);
+    if(partyFilter)parties=parties.filter(p=>p.partyName===partyFilter);
+    if(areaFilter)parties=parties.filter(p=>p.area===areaFilter);
+    return{...s,areas,parties};
+  }).filter(r=>(!group||r.group===group)&&(!itemFilter||r.item===itemFilter))
+    .filter(r=>!areaFilter||r.areas.length||r.parties.length)
+    .filter(r=>!partyFilter||r.parties.length)
+    .filter(r=>!search||[r.item,r.group,companyName(r.companyId),...r.areas.map(a=>a.area),...r.parties.flatMap(p=>[p.partyName,p.area])].join(' ').toLowerCase().includes(search));
+  groupReportState={rows:merged,date,companyId,group,item:itemFilter,area:areaFilter,party:partyFilter,search};
+  return groupReportState;
+}
+function groupReportOptions(){
+  const dates=allGroupReportDates(),dateSelect=$('#groupReportDate');if(!dateSelect)return;
+  const previous=dateSelect.value||groupReportLatestDate();dateSelect.innerHTML=dates.map(d=>`<option value="${escapeHtml(d)}">${new Date(d+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'})}</option>`).join('')||'<option value="">No reports</option>';if(dates.includes(previous))dateSelect.value=previous;
+  const date=dateSelect.value||groupReportLatestDate(),stockIds=activeImportIds(db.imports,date),areaIds=activeImportIds(db.areaWiseImports,date),partyIds=activeImportIds(db.partyWiseImports,date);
+  const stock=db.stock.filter(r=>stockIds.has(r.importId));const area=db.areaWiseRows.filter(r=>areaIds.has(r.importId));const party=db.partyWiseRows.filter(r=>partyIds.has(r.importId));
+  const companies=[...new Set([...stock,...area,...party].map(r=>r.companyId).filter(Boolean))].sort((a,b)=>companyName(a).localeCompare(companyName(b)));
+  const setSelect=(id,placeholder,values,label=x=>x)=>{const el=$(id),old=el.value;el.innerHTML=`<option value="">${placeholder}</option>`+values.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(label(v))}</option>`).join('');if(values.includes(old))el.value=old;};
+  setSelect('#groupReportCompany','All companies',companies,companyName);
+  const companyId=$('#groupReportCompany').value;const scoped=stock.filter(r=>!companyId||r.companyId===companyId);
+  setSelect('#groupReportGroup','All groups',[...new Set(scoped.map(r=>r.group).filter(Boolean))].sort());
+  setSelect('#groupReportItem','All items',[...new Set(scoped.map(r=>r.item).filter(Boolean))].sort());
+  setSelect('#groupReportArea','All areas',[...new Set([...area.map(r=>Object.keys(r.areas||{})).flat(),...party.map(r=>r.area)].filter(Boolean))].sort());
+  setSelect('#groupReportParty','All parties',[...new Set(party.map(r=>r.partyName||r.party).filter(Boolean))].sort());
+}
+function sumBy(rows,key){return rows.reduce((sum,row)=>sum+number(row[key]),0);}
+function groupMiniTable(headers,rows,cls=''){
+  return `<div class="table-wrap"><table class="group-mini-table ${cls}"><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+}
+function renderGroupReport(){
+  if(!$('#groupReportTableWrap'))return;groupReportOptions();const state=mergedGroupReportData(),rows=state.rows;
+  const companies=new Set(rows.map(r=>r.companyId)),areaCount=new Set(rows.flatMap(r=>r.areas.map(a=>a.area))).size,partyCount=new Set(rows.flatMap(r=>r.parties.map(p=>p.partyName))).size;
+  $('#groupReportSummary').innerHTML=[['Report Month',state.date?new Date(state.date+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'-'],['Companies',companies.size],['Items',rows.length],['Areas / Parties',`${areaCount} / ${partyCount}`]].map(([l,v])=>`<div class="summary-chip"><span>${l}</span><strong>${escapeHtml(v)}</strong></div>`).join('');
+  if(!rows.length){$('#groupReportTableWrap').innerHTML='<div class="group-empty">No merged records are available for the selected filters. Make sure active SSR, Area Wise and Party Wise reports share the same report date and matched product names.</div>';return;}
+  const byCompany=new Map();rows.forEach(r=>{if(!byCompany.has(r.companyId))byCompany.set(r.companyId,[]);byCompany.get(r.companyId).push(r);});
+  $('#groupReportTableWrap').innerHTML=[...byCompany.entries()].map(([cid,items])=>{
+    const ssrRows=items.map(r=>`<tr><td>${escapeHtml(r.item)}</td><td>${escapeHtml(r.group||'-')}</td><td>${money(r.saleQty)}</td><td>${money(r.returnQty)}</td><td>${money(r.netSaleQty)}</td><td>${money(r.closingQty)}</td><td>${money(r.netSaleAmount)}</td></tr>`).join('');
+    const detail=items.map((r,index)=>{
+      const areaAgg=new Map();r.areas.forEach(a=>{const old=areaAgg.get(a.area)||{quantity:0,amount:0};old.quantity+=a.quantity;old.amount+=a.amount;areaAgg.set(a.area,old);});
+      const areaRows=[...areaAgg.entries()].map(([name,v])=>`<tr><td>${escapeHtml(name)}</td><td>${money(v.quantity)}</td><td>${money(v.amount)}</td></tr>`);areaRows.push(`<tr><th>Total</th><th>${money([...areaAgg.values()].reduce((s,v)=>s+v.quantity,0))}</th><th>${money([...areaAgg.values()].reduce((s,v)=>s+v.amount,0))}</th></tr>`);
+      const partyRows=r.parties.map(p=>`<tr><td>${escapeHtml(p.partyName)}</td><td>${escapeHtml(p.area||'-')}</td><td>${money(p.qty)}</td><td>${money(p.bonus)}</td><td>${money(p.unitTp||p.tpAmount)}</td><td>${money(p.netAmount)}</td></tr>`);partyRows.push(`<tr><th>Total</th><th></th><th>${money(sumBy(r.parties,'qty'))}</th><th>${money(sumBy(r.parties,'bonus'))}</th><th>${money(sumBy(r.parties,'tpAmount'))}</th><th>${money(sumBy(r.parties,'netAmount'))}</th></tr>`);
+      return `<details class="group-item-details" ${index===0?'open':''}><summary>Item: ${escapeHtml(r.item)}</summary><div class="group-item-grid"><div><p class="group-subtitle">Area Wise Details</p>${groupMiniTable(['Area Name','Quantity','Amount'],areaRows,'group-area-table')}</div><div><p class="group-subtitle">Party Wise Details</p>${groupMiniTable(['Party Name','Area','Quantity','Bonus','TP','Net Amount'],partyRows)}</div></div></details>`;
+    }).join('');
+    return `<section class="group-report-company"><div class="group-report-company-title">${escapeHtml(companyName(cid))}</div><div class="group-ssr-table"><p class="group-subtitle">SSR Summary</p>${groupMiniTable(['Item Name','Group','Sale Qty','Return Qty','Net Sale Qty','Closing Qty','Net Amount'],[ssrRows])}</div><div class="group-match-note">Area Wise and Party Wise records are merged by company, report date and normalized item name.</div>${detail}</section>`;
+  }).join('');initTopScrollbars();
+}
+function groupReportText(){
+  const s=mergedGroupReportData();if(!s.rows.length)return'';const lines=['TAWAKAL ENTERPRISES','GROUP REPORT - SSR + AREA WISE + PARTY WISE',`REPORT MONTH: ${s.date}`,''];
+  s.rows.forEach(r=>{lines.push(`COMPANY: ${companyName(r.companyId)}`,`GROUP: ${r.group||'-'}`,`ITEM: ${r.item}`,`SSR: Sale ${money(r.saleQty)} | Return ${money(r.returnQty)} | Net Sale ${money(r.netSaleQty)} | Closing ${money(r.closingQty)} | Net Amount ${money(r.netSaleAmount)}`,'AREA WISE:');r.areas.forEach(a=>lines.push(`  ${a.area} | Qty ${money(a.quantity)} | Amount ${money(a.amount)}`));lines.push('PARTY WISE:');r.parties.forEach(p=>lines.push(`  ${p.partyName} | ${p.area} | Qty ${money(p.qty)} | Bonus ${money(p.bonus)} | TP ${money(p.unitTp||p.tpAmount)} | Net ${money(p.netAmount)}`));lines.push('');});return lines.join('\n');
+}
+function buildGroupReportPdfDoc(){
+  const state=mergedGroupReportData(),rows=state.rows,jsPDF=window.jspdf?.jsPDF;
+  if(!rows.length)return null;
+  if(!jsPDF||typeof jsPDF!=='function')return null;
+  try{
+    const doc=new jsPDF({orientation:'portrait',unit:'pt',format:'a3'});
+    if(typeof doc.autoTable!=='function')return null;
+    const pageWidth=doc.internal.pageSize.getWidth(),pageHeight=doc.internal.pageSize.getHeight();
+    const monthLabel=state.date?new Date(state.date+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'-';
+    const companyIds=[...new Set(rows.map(r=>r.companyId))];
+    let cursorY=addDashboardReportHeader(doc,{
+      distributor:'TAWAKAL ENTERPRISES',
+      title:'GROUP REPORT - SSR + AREA WISE + PARTY WISE',
+      meta:`Report Month: ${monthLabel}    Companies: ${companyIds.length}    Items: ${rows.length}`,
+      company:state.companyId?companyName(state.companyId):'All Companies'
+    });
+    const ensureSpace=(needed=110)=>{if(cursorY+needed>pageHeight-34){doc.addPage();cursorY=38;}};
+    const byCompany=new Map();rows.forEach(r=>{if(!byCompany.has(r.companyId))byCompany.set(r.companyId,[]);byCompany.get(r.companyId).push(r);});
+    for(const [cid,items] of byCompany.entries()){
+      ensureSpace(130);
+      doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(0,0,0);
+      doc.text(`Company: ${companyName(cid)}`,24,cursorY);cursorY+=10;
+      const ssrBody=items.map(r=>[
+        cleanImportedItem(r.item),r.group||'-',money(r.saleQty),money(r.returnQty),money(r.netSaleQty),money(r.closingQty),money(r.netSaleAmount)
+      ]);
+      doc.autoTable({
+        startY:cursorY,
+        head:[['Item Name','Group','Sale Qty','Return Qty','Net Sale Qty','Closing Qty','Net Amount']],
+        body:ssrBody,
+        ...dashboardAutoTableBase(5.2),
+        margin:{left:24,right:24,top:28,bottom:28},
+        columnStyles:{0:{cellWidth:185,halign:'left'},1:{cellWidth:95,halign:'left'}},
+        didDrawPage:()=>{}
+      });
+      cursorY=doc.lastAutoTable.finalY+14;
+      for(const item of items){
+        ensureSpace(180);
+        doc.setFont('helvetica','bold');doc.setFontSize(9.5);
+        doc.text(`Item: ${cleanImportedItem(item.item)}`,30,cursorY);cursorY+=7;
+        const areaAgg=new Map();
+        item.areas.forEach(a=>{const old=areaAgg.get(a.area)||{quantity:0,amount:0};old.quantity+=number(a.quantity);old.amount+=number(a.amount);areaAgg.set(a.area,old);});
+        const areaBody=[...areaAgg.entries()].map(([name,v])=>[name,money(v.quantity),money(v.amount)]);
+        areaBody.push(['Total',money([...areaAgg.values()].reduce((s,v)=>s+v.quantity,0)),money([...areaAgg.values()].reduce((s,v)=>s+v.amount,0))]);
+        doc.autoTable({
+          startY:cursorY,
+          head:[['Area Name','Quantity','Amount']],
+          body:areaBody.length?areaBody:[['No area-wise records','0','0']],
+          ...dashboardAutoTableBase(5.0),
+          margin:{left:30,right:pageWidth/2+8,top:28,bottom:28},
+          tableWidth:(pageWidth-76)/2,
+          columnStyles:{0:{halign:'left'}},
+          didParseCell:data=>{if(data.section==='body'&&data.row.index===areaBody.length-1)data.cell.styles.fontStyle='bold';}
+        });
+        const areaEnd=doc.lastAutoTable.finalY;
+        const partyBody=item.parties.map(p=>[p.partyName,p.area||'-',money(p.qty),money(p.bonus),money(p.unitTp||p.tpAmount),money(p.netAmount)]);
+        partyBody.push(['Total','',money(sumBy(item.parties,'qty')),money(sumBy(item.parties,'bonus')),money(sumBy(item.parties,'tpAmount')),money(sumBy(item.parties,'netAmount'))]);
+        doc.autoTable({
+          startY:cursorY,
+          head:[['Party Name','Area','Qty','Bonus','TP','Net Amount']],
+          body:partyBody.length?partyBody:[['No party-wise records','','0','0','0','0']],
+          ...dashboardAutoTableBase(4.6),
+          margin:{left:pageWidth/2+8,right:30,top:28,bottom:28},
+          tableWidth:(pageWidth-76)/2,
+          columnStyles:{0:{cellWidth:115,halign:'left'},1:{cellWidth:65,halign:'left'}},
+          didParseCell:data=>{if(data.section==='body'&&data.row.index===partyBody.length-1)data.cell.styles.fontStyle='bold';}
+        });
+        const partyEnd=doc.lastAutoTable.finalY;
+        cursorY=Math.max(areaEnd,partyEnd)+16;
+      }
+      cursorY+=4;
+    }
+    const pageCount=doc.internal.getNumberOfPages();
+    for(let i=1;i<=pageCount;i++){
+      doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(90,90,90);
+      doc.text(`Group Report | ${monthLabel} | Page ${i} of ${pageCount}`,pageWidth/2,pageHeight-14,{align:'center'});
+    }
+    return doc;
+  }catch(err){console.warn('Group Report table PDF generation failed.',err);return null;}
+}
+function groupReportPdfBlob(){
+  const text=groupReportText();
+  if(!text)return null;
+  return pdfBlobFromDocOrText(buildGroupReportPdfDoc(),text);
+}
+function bindGroupReport(){
+  const ids=['groupReportDate','groupReportCompany','groupReportGroup','groupReportItem','groupReportArea','groupReportParty','groupReportSearch'];ids.forEach(id=>{const el=$('#'+id);if(el&&!el.dataset.groupBound){el.dataset.groupBound='1';el.addEventListener(id==='groupReportSearch'?'input':'change',()=>{if(id==='groupReportDate'||id==='groupReportCompany')groupReportOptions();renderGroupReport();});}});
+  const reset=$('#resetGroupReportFilters');if(reset&&!reset.dataset.groupBound){reset.dataset.groupBound='1';reset.addEventListener('click',()=>{['groupReportCompany','groupReportGroup','groupReportItem','groupReportArea','groupReportParty','groupReportSearch'].forEach(id=>{const el=$('#'+id);if(el)el.value='';});renderGroupReport();});}
+  const preview=$('#previewGroupReportPdf');if(preview&&!preview.dataset.groupBound){preview.dataset.groupBound='1';preview.addEventListener('click',()=>{const blob=groupReportPdfBlob();if(!blob)return toast('No merged records available');openPdfPreview(blob);});}
+  const download=$('#downloadGroupReportPdf');if(download&&!download.dataset.groupBound){download.dataset.groupBound='1';download.addEventListener('click',()=>{const blob=groupReportPdfBlob();if(!blob)return toast('No merged records available');downloadPdfBlob(blob,`Tawakal-Group-Report-${groupReportState.date||'report'}.pdf`);});}
+}

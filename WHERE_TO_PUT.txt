@@ -1,19 +1,9 @@
-TAWAKAL ENTERPRISES - V21
+TAWAKAL ENTERPRISES V28
 
-Replace these files in your existing project root:
-
+Replace these files in your existing project:
 - index.html
 - app.js
 - styles.css
 
-Keep your existing browser/localStorage data. No report re-import is required for this PDF formatting update.
-
-V21 change:
-- PDF Preview and PDF Download now mirror the SAME report layout shown inside the Employee Dashboard report panel.
-- Stock PDF keeps the dashboard group heading + dashboard stock table + totals, in portrait.
-- Area Wise PDF keeps the exact dashboard ITEM / Area / TTL QTY / TTL AMT matrix, in portrait.
-- Party Wise PDF keeps the dashboard invoice/party rows, item rows, totals and Grand Total, in portrait.
-- Dashboard-style light table headers, borders, alignment and report heading are used in the generated PDFs.
-- Stock uses portrait A3 because the dashboard table is very wide.
-- Area Wise uses portrait A4 or portrait A3 depending on visible area columns.
-- Party Wise uses portrait A4.
+For this update, the main functional change is in app.js.
+After replacing the files, refresh with Ctrl + F5.
